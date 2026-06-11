@@ -7,7 +7,9 @@ class Circle(Figure):
 
     def __init__(self, radius: int | float):
         if radius <= 0:
-            raise ValueError(f'Radius circle must be above zero, current is radius={radius}')
+            raise ValueError(
+                f"Radius circle must be above zero, current is radius={radius}"
+            )
 
         self.radius = radius
 
@@ -17,4 +19,4 @@ class Circle(Figure):
 
     @property
     def get_area(self):
-        return math.pi * (self.radius ** 2)
+        return math.pi * (self.radius**2)

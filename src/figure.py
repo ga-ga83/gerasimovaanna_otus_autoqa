@@ -16,5 +16,7 @@ class Figure(ABC):
 
     def add_area(self, figure):
         if not isinstance(figure, Figure):
-            raise ValueError(f'Argument figure must be Figure or child class, current {type(figure)}')
+            raise ValueError(
+                f"Argument figure must be Figure or child class, current {type(figure)}"
+            )
         return self.get_area + figure.get_area
