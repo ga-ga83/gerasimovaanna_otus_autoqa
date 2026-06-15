@@ -6,12 +6,12 @@ class Figure(ABC):
 
     @property
     @abstractmethod
-    def get_perimeter(self):
+    def perimeter(self):
         pass
 
     @property
     @abstractmethod
-    def get_area(self):
+    def area(self):
         pass
 
     def add_area(self, figure):
@@ -19,4 +19,4 @@ class Figure(ABC):
             raise ValueError(
                 f"Argument figure must be Figure or child class, current {type(figure)}"
             )
-        return self.get_area + figure.get_area
+        return self.area + figure.area
