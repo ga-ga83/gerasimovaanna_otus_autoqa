@@ -1,5 +1,5 @@
 import math
-from figure import Figure
+from src.figure import Figure
 
 
 class Circle(Figure):
@@ -8,7 +8,7 @@ class Circle(Figure):
     def __init__(self, radius: int | float):
         if radius <= 0:
             raise ValueError(
-                f"Radius circle must be above zero, current is radius={radius}"
+                f'Radius circle must be above zero, current is radius={radius}'
             )
 
         self.radius = radius

@@ -1,10 +1,10 @@
-from figure import Figure
+from src.figure import Figure
 
 
 class Square(Figure):
     def __init__(self, side_a: int | float):
         if side_a <= 0:
-            raise ValueError(f"Sides must be above zero, current is side_a={side_a}")
+            raise ValueError(f'Sides must be above zero, current is side_a={side_a}')
 
         self.side_a = side_a
 
