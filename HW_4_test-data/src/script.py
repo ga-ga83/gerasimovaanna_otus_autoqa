@@ -50,4 +50,3 @@ if __name__ == "__main__":
     with timer_context('Books Distribution'):
         distribute_books()
     print(f'\n[End] скрипт завершил работу.')
-
