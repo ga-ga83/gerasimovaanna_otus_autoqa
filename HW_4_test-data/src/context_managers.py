@@ -15,35 +15,24 @@ def timer_context(task_name: str = "Operation"):
 
 
 class FileOpener:
-    def __init__(self, filename, mode):
+    def __init__(self, filename: str, mode: str):
         self.filename = filename
         self.mode = mode
+        self.file: object | None = None
 
     def __enter__(self):
         print(f"1. [ENTER] Открываем файл {self.filename}...(mode: {self.mode}")
-        self.file = open(self.filename, self.mode)
+        self.file = open(self.filename, self.mode, encoding='utf-8')
         return self.file  # Этот объект пойдет в переменную после "as"
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         print(f"3. [EXIT] Закрываем файл {self.filename} в любом случае!")
-        self.file.close()
+        if self.file:
+            self.file.close()
+            print(f'Закрыли файл {self.filename}')
 
         if exc_type is not None:
             print(f"Замечена ошибка: {exc_type}. Но файл мы всё равно закрыли!")
-            return True
-        return False
-
-
-if __name__ == "__main__":
-    with timer_context("JSON Processing"):
-        time.sleep(2)  # Имитация работы
-        print("step two!")
-    print("step five!")
-
-    with FileOpener("data/result.json", "w") as f:
-        print("2. [WITH] Пишем данные в файл...")
-        f.write("")
-        f.div()
-
-print('foo')
+            return False
+        return True
 
