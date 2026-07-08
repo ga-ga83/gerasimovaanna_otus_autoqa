@@ -12,3 +12,4 @@ def pytest_addoption(parser):
         default=200,
         help="Ожидаемый HTTP статус-код",
     )
+

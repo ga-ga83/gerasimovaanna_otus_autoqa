@@ -47,3 +47,4 @@ class JPlaceholderService(BaseService):
         raw = cls().delete(url, headers=headers)
         # Если BaseService вернул None (ошибка/пустой JSON), вернём пустой dict, чтобы тест не падал сразу
         return raw or {}
+

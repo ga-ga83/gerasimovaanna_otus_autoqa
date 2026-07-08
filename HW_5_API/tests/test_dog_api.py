@@ -52,3 +52,4 @@ def test_hound_sub_breeds():
     subs: DogApiListResponse = DogService.sub_breeds('hound')
     assert isinstance(subs, DogApiListResponse)
     assert any(x in subs.message for x in ('afghan', 'basset', 'blood'))
+

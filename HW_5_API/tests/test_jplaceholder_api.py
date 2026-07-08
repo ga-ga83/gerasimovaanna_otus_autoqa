@@ -52,3 +52,4 @@ def test_delete_post(post_id):
         assert resp_get is None, "Пост должен быть недоступен после удаления"
     except Exception:
         pass
+

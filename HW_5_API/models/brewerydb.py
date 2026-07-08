@@ -29,3 +29,4 @@ class MetaResponse(BaseModel):
     total: str = Field(strict=True)
     page: str = Field(strict=True)
     per_page: str = Field(strict=True)
+

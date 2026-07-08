@@ -85,3 +85,4 @@ class BaseService:
         except requests.exceptions.RequestException as e:
             logger.error("Error. %s", str(e))
             return None
+

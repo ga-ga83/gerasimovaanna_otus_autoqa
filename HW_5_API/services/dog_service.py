@@ -59,3 +59,4 @@ class DogService(BaseService):
             img = cls.random_image()
             images.append(img.message)
         return DogApiListResponse(message=images, status="success")
+

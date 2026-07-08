@@ -29,3 +29,4 @@ class DogApiBreedsListResponse(BaseModel):
         if value not in ("success", "error"):
             raise ValueError(f"Status is not [success, error], but given {value}")
         return value
+

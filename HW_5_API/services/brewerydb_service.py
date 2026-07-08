@@ -37,3 +37,4 @@ class BreweryService(BaseService):
         page = int(response_headers.get("page", "1"))
         per_page = int(response_headers.get("per_page", "20"))
         return MetaResponse(total=total, page=page, per_page=per_page)
+

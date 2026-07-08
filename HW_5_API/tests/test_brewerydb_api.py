@@ -58,3 +58,4 @@ def test_get_by_known_id():
     assert brew.id == known_id
     assert brew.name
     assert brew.website_url is not None
+

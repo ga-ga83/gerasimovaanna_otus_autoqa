@@ -16,3 +16,4 @@ def test_url_returns_expected_status(url_and_status):
     assert resp.status_code == expected, (
         f"Для {url} ожидался статус {expected}, но получен {resp.status_code}"
     )
+
