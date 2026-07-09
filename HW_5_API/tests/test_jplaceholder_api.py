@@ -6,10 +6,18 @@ from HW_5_API.models.jplaceholder_api import PostsBase, CommentsBase, Album
 
 
 def test_posts_list():
-    raw = JPlaceholderService.get_list_posts()
-    assert len(raw) > 0
-    posts = [PostsBase.model_validate(obj) for obj in raw]
-    assert all(p.id is not None for p in posts)
+    posts = JPlaceholderService.get_list_posts()
+
+    # Бизнес-проверка: список не пустой
+    assert len(posts) > 0, 'Список постов не должен быть пустым'
+
+    # Проверка наличия обязательных полей и их корректности
+    for i, post in enumerate(posts):
+        assert post.id is not None, f'Пост на позиции {i} не имеет id'
+        assert isinstance(post.id, int), f'id поста на позиции {i} должен быть int'
+        assert post.title is not None and post.title != "", f'Пост на позиции {i} не имеет title'
+        assert post.body is not None and post.body != "", f'Пост на позиции {i} не имеет body'
+        assert post.userId is not None, f'Пост на позиции {i} не имеет userId'
 
 
 @pytest.mark.parametrize('post_id', [1, 45, 100])
@@ -47,9 +55,5 @@ def test_put_update(post_id, new_title):
 def test_delete_post(post_id):
     resp = JPlaceholderService.delete_post(post_id)
     assert isinstance(resp, dict)
-    try:
-        resp_get = JPlaceholderService.get_post_by_id(post_id)
-        assert resp_get is None, "Пост должен быть недоступен после удаления"
-    except Exception:
-        pass
-
+    resp_get = JPlaceholderService.get_post(post_id)
+    assert resp_get is not None, "На JSONPlaceholder DELETE не удаляет ресурс реально"

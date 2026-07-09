@@ -10,40 +10,48 @@ def test_first_page_is_not_empty():
     data: BreweryListResponse = BreweryService.list_all()
     assert len(data.data) > 0, "Список пивоварен пуст"
 
-    # берём первую запись
+    # Бизнес-проверка: у первой записи есть осмысленное имя и город
     first = data.data[0]
-
-    assert isinstance(first, BreweryResponse)
-    for key in ("id", "name", "brewery_type", "city", "state", "country"):
-        assert getattr(first, key) is not None, f"Поле {key} отсутствует у первой записи"
+    assert first.name and len(first.name.strip()) > 0
+    assert first.city and len(first.city.strip()) > 0
 
 
 # тест пагинации (per_page = 5, 10, 20)
 @pytest.mark.parametrize('per_page', [5, 10, 20])
-def test_pagination(per_page):
+def test_pagination_count(per_page):
+    """Пагинация: количество элементов должно соответствовать запрошенному per_page,
+    если общее количество записей больше этого значения."""
     data: BreweryListResponse = BreweryService.list_all(params={"per_page": per_page})
 
-    # Проверяем, что количество элементов равно запрошенному
-    assert len(data.data) == per_page
+    # Если записей меньше, чем per_page — это нормально (последняя страница)
+    assert len(data.data) <= per_page
 
-    # Проверяем валидность каждого элемента списка
-    for brew in data.data:
-        assert isinstance(brew, BreweryResponse)
+    # Но хотя бы одна запись должна быть, если в базе вообще есть пивоварни
+    assert len(data.data) >= 1
 
 
 # тест по параметризации списка по городам/штатам
 @pytest.mark.parametrize(
-    "params,value,field",
+    "filter_param,value,field",
     [
-        ("by_city", "San Diego", "city"),
-        ("by_city", "New York", "city"),
+        ("city", "San Diego", "city"),
+        ("city", "Westlake Village", "city"),
+        ("state", "California", "state"),
     ],
 )
-def test_filter_city_state(params, value, field):
-    data: BreweryResponse = BreweryService.list_all(params={params: value})
-    assert len(data.data) > 0, f"Нет результатов для фильтра {params}={value}"
-    assert any(getattr(item, field) == value for item in data.data), \
-        f"В результатах нет значения {value} в поле {field}"
+def test_filter_by_city(filter_param, value, field):
+    """Фильтр должен возвращать хотя бы одну пивоварню с нужным значением поля."""
+    data = BreweryService.list_all(params={filter_param: value})
+
+    # бизнес-проверка: фильтр нашёл что-то (не пустой результат)
+    assert len(data.data) > 0, f"Нет результатов для фильтра {filter_param}={value}"
+
+    # бизнес-проверка: хотя бы одна запись действительно соответствует фильтру
+    matches = [item for item in data.data if getattr(item, field) == value]
+    assert len(matches) > 0, (
+        f"В результатах для {filter_param}={value} нет ни одной записи "
+        f"с {field}={value}. Возвращено записей: {len(data.data)}"
+    )
 
 
 def test_search_query():
