@@ -1,5 +1,4 @@
-from src.circle import Circle
-from src.triangle import Triangle
+from HW_1_3.src.triangle import Triangle
 import pytest
 
 

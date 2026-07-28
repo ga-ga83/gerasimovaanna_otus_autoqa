@@ -1,7 +1,5 @@
-from src.square import Square
+from HW_1_3.src.square import Square
 import pytest
-
-from tests.test_rectangle import TestRectangle
 
 
 class TestSquare():
