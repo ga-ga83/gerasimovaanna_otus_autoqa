@@ -1,4 +1,4 @@
-from src.rectangle import Rectangle
+from HW_1_3.src.rectangle import Rectangle
 import pytest
 
 
