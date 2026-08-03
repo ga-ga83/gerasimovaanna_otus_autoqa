@@ -245,4 +245,3 @@ def test_currency_change(browser: WebDriver, base_url: str, wait: WebDriverWait)
         EC.visibility_of_element_located((By.CSS_SELECTOR, "ul.faceted-slider[data-slider-label='Price'] p"))
     )
     assert "$21.00 - $42.00" in price_label.text, "Валюта на странице каталога не переключена на US Dollar$"
-
