@@ -236,6 +236,7 @@ def test_currency_change(browser: WebDriver, base_url: str, wait: WebDriverWait)
         EC.visibility_of_element_located((By.CSS_SELECTOR, "#_desktop_currency_selector button span._gray-darker"))
     )
 
+
     # Проверяем, что текст кнопки обновился на 'USD $'
     assert current_currency.text == "USD $", f"Ожидалась валюта USD $, но отображается: '{current_currency.text}'"
     locator = (By.XPATH, "//a[@href='http://localhost:8081/3-clothes']")
