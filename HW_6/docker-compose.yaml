@@ -1,0 +1,101 @@
+services:
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 1
+      PMA_USER: root
+      PMA_PASSWORD: admin
+    ports:
+      - "8888:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+  db:
+    изображение: mysql: 5.7
+    имя_контейнера: mysql_db
+    перезапуск: еслинеостановлен
+    Окружающая среда:
+      ПАРОЛЬ MYSQL_ROOT_PASSWORD: администратор
+      БАЗА ДАННЫХ MYSQL_DATABASE: prestashop
+    проверка работоспособности:
+      тест: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
+      интервал: 10 секунд
+      тайм-аут: 5 секунд
+      попыток: 10
+      начальный период: 30 секунд
+    тома:
+ - db_data:/var/lib/mysql
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+  prestashop:
+    изображение: prestashop/prestashop: 8.1.5
+    container_name: prestashop
+    перезапуск: если не остановлен
+    порты:
+      - "8081:80"
+    Окружающая среда:
+      DB_SERVER: бд
+      ИМЯ_БД: prestashop
+      DB_USER: root
+      DB_PASSWD: администратор
+      DB_PREFIX: ps_
+      PS_INSTALL_AUTO: "1"
+      PS_ЯЗЫК: "en"
+      PS_COUNTRY: "МЫ"
+      PS_DEV_MODE: "1"
+      PS_DOMAIN: "локальный хост:8081"
+      ADMIN_MAIL: "admin@example.com"
+      ADMIN_PASSWD: "Admin123!"
+      PS_FOLDER_ADMIN: "администрация"
+      PS_FOLDER_INSTALL: "установить"
+    тома:
+ - ps_data:/var/www/html
+    зависит от:
+      db:
+        condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+  prestashop_postinstall:
+    изображение: alpine:3.19
+    имя_контейнера: prestashop_postinstall
+    перезапуск: "нет"
+    зависит от:
+ - prestashop
+    тома:
+ - ps_data:/var/www/html
+    команда: >
+ sh -lc '
+ apk add --no-cache curl > /dev / null 2> & 1 || true;
+ echo "Ожидание ответа PrestaShop HTTP ...";
+ пока curl -fsS http://prestashop / >/dev / null; перейти в режим ожидания 5; готово;
+ echo "Ожидание создания конфигурации ...";
+ до [ -f /var/www/html/config/settings.inc.php ] || [ -f /var/www/html/app/config/parameters.php ]; перейти в режим ожидания 2; готово;
+ echo "Дополнительный льготный период ...";
+ перейти в режим ожидания 15;
+ echo "Удаление папок установки...";
+ rm -rf /var/www / html/install /var/www / html/install-dev || true;
+ echo "Очистка кэша ...";
+ rm -rf /var/www/html/var/cache/* |/ true;
+ эхо "Готово".
+      '
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
+тома:
+  db_data:
+    драйвер: локальный
+  ps_data:
+    драйвер: локальный
