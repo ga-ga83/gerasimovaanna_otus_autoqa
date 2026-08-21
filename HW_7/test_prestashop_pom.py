@@ -1,4 +1,6 @@
 import pytest
+import random
+import string
 from selenium.webdriver.common.by import By
 
 
@@ -65,8 +67,6 @@ class TestProduct:
         product.close_modal()
 
         # Проверка корзины (1 товар)
-        # Так как assert_cart_is_empty проверяет "(0)", нам нужен метод для проверки "(1)" или переиспользовать логику
-        # Добавим временную проверку URL или текста, так как в HomePage нет метода assert_cart_count_is_one
         cart_count_el = home.wait_for_element((By.CSS_SELECTOR, ".blockcart .cart-products-count"))
         assert cart_count_el.text == "(1)", f"Ожидается 1 товар, получено: {cart_count_el.text}"
 
@@ -121,6 +121,37 @@ class TestRegistration:
         reg_page.assert_lastname()
         reg_page.assert_save_button()
 
+    def test_registration_new_user(self, pages):
+        def generate_email():
+            # Генерируем случайную часть из 8 строчных букв
+            local_part = "".join(random.choices(string.ascii_lowercase, k=8))
+            domain = "example.com"
+            return f"{local_part}@{domain}"
+
+        # Сохраняем email и пароль в переменные
+        email = generate_email()
+        password = "nLTqnaXLw8Ma"
+
+        home = pages["home"]
+        login_page = pages["login"]
+        reg_page = pages["registration"]
+
+        # Переход на страницу регистрации
+        home.click_sing_in()
+        login_page.get_register_link().click()
+
+        # Заполнение формы регистрации
+        reg_page.input_firstname("NGGJkk")
+        reg_page.input_lastname("Klhhgg")
+        reg_page.input_email(email)
+        reg_page.enter_password(password)
+        reg_page.click_check_books_items()
+        reg_page.click_check_books_customer()
+        reg_page.click_save_button()
+
+        # Проверка успешной регистрации
+        login_page.assert_user_logged_in("Sign out NGGJkk Klhhgg")
+
 
 class TestCurrency:
     def test_currency_change(self, pages):
@@ -136,3 +167,58 @@ class TestCurrency:
 
         # Переход в каталог для проверки цен
         catalog.click_clothes_link()
+
+
+class TestAdministration:
+
+    def test_authorization(self, pages):
+        """Тест 1: Проверка авторизации на странице"""
+        admin_page = pages["administration"]
+
+        admin_page.open_admin_page()
+        admin_page.driver.maximize_window()
+        admin_page.enter_email("admin@example.com")
+        admin_page.enter_password("Admin123!")
+        admin_page.click_login_in()
+
+        admin_page.assert_administration_logged_in()
+        admin_page.select_element_page()
+        admin_page.select_menu_block()
+
+    def test_create_new_product(self, pages):
+        """Тест 2: Создание нового товара """
+        admin_page = pages["administration"]
+
+        # Логика создания товара
+        admin_page.subtab_catalog_click()
+        admin_page.subtab_products_click()
+        admin_page.check_product_page()
+
+        admin_page.new_product_button()
+        admin_page.open_product_modal_and_select_standard()
+        admin_page.check_form_new_product()
+
+        product_name = f"Blouse-test {random.randint(10, 999)}"
+        admin_page.name_new_product(product_name)
+        admin_page.save_new_product()
+        admin_page.check_message_save_product("Successful update")
+
+        admin_page.select_menu_block()
+        admin_page.subtab_catalog_click()
+        admin_page.subtab_products_click()
+        admin_page.check_product_page()
+
+        # Поиск созданного товара
+        admin_page.select_new_product(product_name)
+
+    def test_delete_new_product(self, pages):
+        """Тест: Удаление созданного товара """
+
+        admin_page = pages["administration"]
+        #удаление товара
+        admin_page.go_to_catalog()
+        admin_page.select_product_delete()
+        admin_page.select_submit_menu_product()
+        admin_page.menu_product_delete()
+        admin_page.modal_dialog_delete()
+
