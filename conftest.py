@@ -3,14 +3,11 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.firefox.service import Service as FirefoxService
-from selenium.webdriver.edge.service import Service as EdgeService
+# Edge пока убираем из импортов, так как браузера нет в образе
+# from selenium.webdriver.edge.service import Service as EdgeService
 import allure
 
 from HW_8.pages.admin_page import AdminPage
-#from webdriver_manager.chrome import ChromeDriverManager
-#from webdriver_manager.firefox import GeckoDriverManager
-#from webdriver_manager.microsoft import EdgeChromiumDriverManager
-
 from HW_8.pages.home_page import HomePage
 from HW_8.pages.catalog_page import CatalogPage
 from HW_8.pages.product_page import ProductPage
@@ -18,8 +15,6 @@ from HW_8.pages.login_page import LoginPage
 from HW_8.pages.registration_page import RegistrationPage
 from HW_8.pages.base_page import BasePage
 
-
-#Настройка логгера
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -30,28 +25,26 @@ def pytest_addoption(parser):
         "--browser",
         action="store",
         default="chrome",
-        choices=["chrome", "firefox", "edge"],
-        help="Browser to run tests with: chrome, firefox, edge"
+        # Убрали 'edge', так как его нет в текущем Docker образе
+        choices=["chrome", "firefox"],
+        help="Browser to run tests with: chrome, firefox"
     )
     parser.addoption(
         "--base-url",
         action="store",
-        default="http://localhost:8081/",
+        default="http://host.docker.internal:8081/", # Важно для Docker! localhost внутри контейнера - это сам контейнер
         help="Base URL for tests"
     )
     parser.addoption(
         "--headless",
         action="store_true",
-        default=False,
+        default=True, # В Docker всегда лучше запускать headless
         help="Run browser in headless mode"
     )
 
-
 @pytest.fixture(scope="session")
 def base_url(request) -> str:
-    """Фикстура для получения базового URL."""
     return request.config.getoption("--base-url")
-
 
 @pytest.fixture(scope="session")
 def browser(request, base_url):
@@ -64,24 +57,27 @@ def browser(request, base_url):
             options = webdriver.ChromeOptions()
             if headless:
                 options.add_argument("--headless=new")
-            # Менеджер больше не нужен, Selenium всё сделает сам:
+
+            # !!! КРИТИЧЕСКИ ВАЖНО ДЛЯ DOCKER !!!
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            # Отключаем предупреждения в логах
+            options.add_argument("--disable-gpu")
+
             driver = webdriver.Chrome(options=options)
 
         elif browser_name == "firefox":
             options = webdriver.FirefoxOptions()
             if headless:
-                options.add_argument("-headless")
-            # Просто передаем опции:
+                # ИСПРАВЛЕНО: было "-headless", стало "--headless"
+                options.add_argument("--headless")
+
             driver = webdriver.Firefox(options=options)
 
-        elif browser_name == "edge":
-            options = webdriver.EdgeOptions()
-            if headless:
-                options.add_argument("--headless=new")
-            # Просто передаем опции:
-            driver = webdriver.Edge(options=options)
+        # Блок для Edge удален, так как браузера нет в образе.
+        # Если очень нужен Edge, придется ставить его в Dockerfile аналогично Chrome.
         else:
-            pytest.exit(f"Unsupported browser: {browser_name}. Use: chrome, firefox, edge")
+            pytest.exit(f"Unsupported browser: {browser_name}. Use: chrome, firefox")
 
         driver.base_url = base_url
         yield driver
@@ -92,13 +88,11 @@ def browser(request, base_url):
         if driver is not None:
             driver.quit()
 
-
 @pytest.fixture
 def pages(browser, base_url):
-    #Передаем логгер в страницы для удобства
     logger = logging.getLogger("PageObjects")
     return {
-        "home": HomePage(browser, base_url,logger),
+        "home": HomePage(browser, base_url, logger),
         "catalog": CatalogPage(browser, base_url, logger),
         "product": ProductPage(browser, base_url, logger),
         "login": LoginPage(browser, base_url, logger),
@@ -106,44 +100,38 @@ def pages(browser, base_url):
         "administration": AdminPage(browser, base_url, logger)
     }
 
-#фикстура длЯ логгера
 @pytest.fixture()
 def logger():
     return logging.getLogger(__name__)
 
-#фикстура для скриншота при падении теста
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
-    """Сохраняет результат выполнения теста в атрибут узла, чтобы фикстуры могли его прочитать."""
     outcome = yield
     rep = outcome.get_result()
-
-    # Сохраняем только результат этапа 'call' (сам запуск теста)
     if rep.when == "call":
         setattr(item, "rep_call", rep)
 
-
 @pytest.fixture(autouse=True)
 def take_screenshot_on_failure(request):
-    """Автоматически делает скриншот при падении любого теста"""
-    yield  # Здесь выполняется сам тест
+    yield
 
-    # Проверяем, что атрибут существует и тест упал
+    # Проверка: упал ли тест?
     if hasattr(request.node, "rep_call") and request.node.rep_call.failed:
         try:
-            # Получаем pages через getfixturevalue — это безопасно даже если фикстура уже завершилась
+            # Пытаемся получить страницы, но оборачиваем в try-except,
+            # если фикстура pages не успела инициализироваться
             pages = request.getfixturevalue("pages")
             driver = pages["home"].driver
 
-            # Делаем скриншот
-            screenshot = driver.get_screenshot_as_png()
+            if driver:
+                screenshot = driver.get_screenshot_as_png()
+                allure.attach(
+                    screenshot,
+                    name=f'Screenshot_on_failure_{request.node.name}',
+                    attachment_type=allure.attachment_type.PNG
+                )
+            else:
+                print("Не удалось сделать скриншот: драйвер не был создан.")
 
-            allure.attach(
-                screenshot,
-                name=f'Screenshot_on_failure_{request.node.name}',
-                attachment_type=allure.attachment_type.PNG
-            )
         except Exception as e:
-            # Если не удалось сделать скриншот (например, браузер закрыт), просто логируем ошибку,
-            # чтобы не ломать отчёт по этой причине
-            print(f"Не удалось сделать скриншот для теста {request.node.name}: {e}")
+            print(f"Ошибка при создании скриншота: {e}")
