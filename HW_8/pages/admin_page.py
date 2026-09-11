@@ -36,7 +36,7 @@ class AdminPage(BasePage):
 
     def open_admin_page(self):
         with allure.step(f'Переход на страницу админки.'):
-            self.driver.get(f"{self.base_url}administration")
+            self.driver.get(f"{self.base_url}admin822fe2dtcjj2lfjgxbj")
 
     def enter_email(self, email):
         with allure.step(f"Ввод Email: {email}"):
@@ -71,12 +71,21 @@ class AdminPage(BasePage):
             self.driver.execute_script("arguments[0].click();", el)
 
     def subtab_catalog_click(self):
-        with allure.step("Клик по подменю Catalog"):
+        with allure.step("Клик по меню Catalog"):
             self.driver.switch_to.default_content()
-            el = WebDriverWait(self.driver, 10).until(
-                EC.visibility_of_element_located(self.CATALOG_SUBTAB)
+
+            # Сначала кликаем по самому меню "Catalog" (если оно свернуто)
+            menu_el = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable(self.MENU_BLOCK)
             )
-            self.driver.execute_script("arguments[0].click();", el)
+            self.driver.execute_script("arguments[0].click();", menu_el)
+
+            # Ждем, пока появится ссылка на Products внутри раскрывшегося меню
+            # Используем более простой селектор, если ID слишком специфичен
+            products_link = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "#subtab-AdminProducts a"))
+            )
+            self.driver.execute_script("arguments[0].click();", products_link)
 
     def subtab_products_click(self):
         with allure.step("Клик по подменю Products"):
