@@ -7,13 +7,18 @@ services:
     restart: unless-stopped
     environment:
       PMA_HOST: mysql
-      PMA_PORT: 3306
-      PMA_ARBITRARY: 1
+      PMA_PORT: "3306"
+      PMA_ARBITRARY: "1"
+      PMA_USER: root
+      PMA_PASSWORD: admin
     ports:
       - "8888:80"
     depends_on:
       mysql:
         condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - prestashop_network
 
@@ -32,11 +37,14 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword" ]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
       interval: 5s
       timeout: 5s
       retries: 30
       start_period: 30s
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - prestashop_network
 
@@ -71,19 +79,21 @@ services:
       DB_USER: prestashop
       DB_PASSWD: prestashop
       DB_PREFIX: ps_
-
-      # КРИТИЧНО ВАЖНО: Увеличиваем время ожидания установки
       PS_INSTALL_AUTO: "1"
       PS_DOMAIN: prestashop
       PS_ENABLE_SSL: "0"
-      PS_ERASE_DB: "0"       # Важно: не стирать базу при каждом старте, если она уже создана
+      PS_ERASE_DB: "0"
       PS_INSTALL_TIMEOUT: "600"
       PS_INSTALL_MODE: Standard
       PS_INSTALL_LANG: en
       PS_INSTALL_COUNTRY: US
+      PS_DEV_MODE: "1"
+      PS_LANGUAGE: "en"
+      PS_COUNTRY: "US"
       ADMIN_MAIL: admin@example.com
       ADMIN_PASSWD: Admin123!
-      PS_FOLDER_ADMIN: admin
+      PS_FOLDER_ADMIN: administration
+      PS_FOLDER_INSTALL: install
       PS_REDIS_SERVER: redis
       PS_REDIS_PORT: "6379"
       PS_REDIS_DATABASE: "0"
@@ -92,12 +102,14 @@ services:
     volumes:
       - prestashop_files:/var/www/html
     healthcheck:
-      # Оставляем wget, он сработает, когда установка закончится
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:80" ]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
       interval: 15s
       timeout: 10s
       retries: 40
       start_period: 120s
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - prestashop_network
 
@@ -163,6 +175,41 @@ services:
       - ./conftest.py:/app/conftest.py
       - ./allure-results:/app/allure-results
     command: python -m pytest HW_8/test_prestashop_all.py --base-url=http://prestashop:80/ --browser=chrome --browser-version=128.0 --selenoid-url=http://selenoid:4444/wd/hub --headless -v --alluredir=/app/allure-results
+    networks:
+      - prestashop_network
+
+  prestashop_postinstall:
+    image: alpine:3.19
+    container_name: prestashop_postinstall
+    restart: "no"
+    depends_on:
+      - prestashop
+    volumes:
+      - prestashop_files:/var/www/html
+    command: >
+      sh -lc '
+        apk add --no-cache curl >/dev/null 2>&1 || true;
+
+        echo "Waiting for PrestaShop HTTP to respond...";
+        until curl -fsS http://prestashop/ >/dev/null; do sleep 5; done;
+
+        echo "Waiting for config to exist...";
+        until [ -f /var/www/html/config/settings.inc.php ] || [ -f /var/www/html/app/config/parameters.php ]; do sleep 2; done;
+
+        echo "Extra grace period...";
+        sleep 15;
+
+        echo "Removing install folders...";
+        rm -rf /var/www/html/install /var/www/html/install-dev || true;
+
+        echo "Clearing cache...";
+        rm -rf /var/www/html/var/cache/* || true;
+
+        echo "Done."
+      '
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     networks:
       - prestashop_network
 

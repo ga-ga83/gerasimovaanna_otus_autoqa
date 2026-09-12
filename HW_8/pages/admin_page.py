@@ -35,8 +35,8 @@ class AdminPage(BasePage):
     #NAME_INPUT = (By.CSS_SELECTOR, "#name_1")
 
     def open_admin_page(self):
-        with allure.step(f'Переход на страницу админки.'):
-            self.driver.get(f"{self.base_url}admin822fe2dtcjj2lfjgxbj")
+        with allure.step('Переход на страницу админки.'):
+            self.driver.get(f"{self.base_url}administration")
 
     def enter_email(self, email):
         with allure.step(f"Ввод Email: {email}"):
