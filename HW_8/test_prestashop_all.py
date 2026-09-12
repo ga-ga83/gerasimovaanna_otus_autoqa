@@ -88,19 +88,31 @@ class TestLogin:
             assert login_page.get_register_link().is_displayed()
 
     def test_login_flow(self, pages):
-        login_page = pages["login"]
-        with allure.step("Вход в систему под админом"):
-            login_page.open_login_page()
-            login_page.enter_email("gerasimowa@inbox.ru")
-            login_page.enter_password("1234lanos!")
-            login_page.click_sign_in()
+        email = f"testuser{random.randint(100, 999)}@example.com"
+        password = "Test1234!"
+        first_name = "Test"
+        last_name = "User"
 
-        with allure.step("Проверка успешного входа"):
-            login_page.assert_user_logged_in('Sign out adminn lanos')
+        with allure.step("Регистрация пользователя"):
+            pages["home"].open()
+            pages["home"].click_sing_in()
+            pages["login"].get_register_link().click()
+
+            reg_page = pages["registration"]
+            reg_page.input_firstname(first_name)
+            reg_page.input_lastname(last_name)
+            reg_page.input_email(email)
+            reg_page.enter_password(password)
+            reg_page.click_check_books_items()
+            reg_page.click_check_books_customer()
+            reg_page.click_save_button()
+
+        with allure.step("Проверка авторизации после регистрации"):
+            pages["login"].assert_user_logged_in('Sign in')
 
         with allure.step("Выход из системы"):
-            login_page.click_logout()
-            login_page.assert_user_logged_out()
+            pages["login"].click_logout()
+            pages["login"].assert_user_logged_out()
 
 
 class TestRegistration:

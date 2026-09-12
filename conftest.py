@@ -1,10 +1,9 @@
 import pytest
 import logging
+import os
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.firefox.service import Service as FirefoxService
-# Edge пока убираем из импортов, так как браузера нет в образе
-# from selenium.webdriver.edge.service import Service as EdgeService
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 import allure
 
 from HW_8.pages.admin_page import AdminPage
@@ -20,64 +19,98 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+
 def pytest_addoption(parser):
     parser.addoption(
         "--browser",
         action="store",
         default="chrome",
-        # Убрали 'edge', так как его нет в текущем Docker образе
         choices=["chrome", "firefox"],
         help="Browser to run tests with: chrome, firefox"
     )
     parser.addoption(
         "--base-url",
         action="store",
-        default="http://host.docker.internal:8081/", # Важно для Docker! localhost внутри контейнера - это сам контейнер
+        default="http://prestashop:80",
         help="Base URL for tests"
     )
     parser.addoption(
         "--headless",
         action="store_true",
-        default=True, # В Docker всегда лучше запускать headless
+        default=True,
         help="Run browser in headless mode"
     )
+    parser.addoption(
+        "--selenoid-url",
+        action="store",
+        default=None,
+        help="Selenoid URL (e.g. http://selenoid:4444/wd/hub). If not set, runs locally."
+    )
+    parser.addoption(
+        "--browser-version",
+        action="store",
+        default="",
+        help="Browser version for Selenoid (e.g. 128.0)"
+    )
+
 
 @pytest.fixture(scope="session")
 def base_url(request) -> str:
-    return request.config.getoption("--base-url")
+    return request.config.getoption("--base-url").rstrip("/") + "/"
+
 
 @pytest.fixture(scope="session")
 def browser(request, base_url):
     browser_name = request.config.getoption("--browser").lower()
     headless = request.config.getoption("--headless")
+    selenoid_url = request.config.getoption("--selenoid-url")
+    browser_version = request.config.getoption("--browser-version")
 
     driver = None
     try:
-        if browser_name == "chrome":
-            options = webdriver.ChromeOptions()
-            if headless:
-                options.add_argument("--headless=new")
+        # ── Режим Selenoid (Remote WebDriver) ──
+        if selenoid_url:
+            if browser_name == "chrome":
+                options = ChromeOptions()
+            elif browser_name == "firefox":
+                options = FirefoxOptions()
+            else:
+                pytest.exit(f"Unsupported browser: {browser_name}")
 
-            # !!! КРИТИЧЕСКИ ВАЖНО ДЛЯ DOCKER !!!
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            # Отключаем предупреждения в логах
-            options.add_argument("--disable-gpu")
+            # Передаём capability для Selenoid: VNC, видео, логи
+            options.set_capability("browserName", browser_name)
+            if browser_version:
+                options.set_capability("browserVersion", browser_version)
+            options.set_capability("selenoid:options", {
+                "enableVNC": True,
+                "enableVideo": False,
+                "enableLog": True,
+            })
 
-            driver = webdriver.Chrome(options=options)
+            driver = webdriver.Remote(
+                command_executor=selenoid_url,
+                options=options,
+            )
 
-        elif browser_name == "firefox":
-            options = webdriver.FirefoxOptions()
-            if headless:
-                # ИСПРАВЛЕНО: было "-headless", стало "--headless"
-                options.add_argument("--headless")
-
-            driver = webdriver.Firefox(options=options)
-
-        # Блок для Edge удален, так как браузера нет в образе.
-        # Если очень нужен Edge, придется ставить его в Dockerfile аналогично Chrome.
+        # ── Локальный режим (как раньше) ──
         else:
-            pytest.exit(f"Unsupported browser: {browser_name}. Use: chrome, firefox")
+            if browser_name == "chrome":
+                options = ChromeOptions()
+                if headless:
+                    options.add_argument("--headless=new")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--disable-gpu")
+                driver = webdriver.Chrome(options=options)
+
+            elif browser_name == "firefox":
+                options = FirefoxOptions()
+                if headless:
+                    options.add_argument("--headless")
+                driver = webdriver.Firefox(options=options)
+
+            else:
+                pytest.exit(f"Unsupported browser: {browser_name}. Use: chrome, firefox")
 
         driver.base_url = base_url
         yield driver
@@ -87,6 +120,7 @@ def browser(request, base_url):
     finally:
         if driver is not None:
             driver.quit()
+
 
 @pytest.fixture
 def pages(browser, base_url):
@@ -100,9 +134,11 @@ def pages(browser, base_url):
         "administration": AdminPage(browser, base_url, logger)
     }
 
+
 @pytest.fixture()
 def logger():
     return logging.getLogger(__name__)
+
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
@@ -111,15 +147,13 @@ def pytest_runtest_makereport(item, call):
     if rep.when == "call":
         setattr(item, "rep_call", rep)
 
+
 @pytest.fixture(autouse=True)
 def take_screenshot_on_failure(request):
     yield
 
-    # Проверка: упал ли тест?
     if hasattr(request.node, "rep_call") and request.node.rep_call.failed:
         try:
-            # Пытаемся получить страницы, но оборачиваем в try-except,
-            # если фикстура pages не успела инициализироваться
             pages = request.getfixturevalue("pages")
             driver = pages["home"].driver
 
