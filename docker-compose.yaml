@@ -153,6 +153,37 @@ services:
     networks:
       - prestashop_network
 
+  ggr:
+    image: aerokube/ggr:latest
+    container_name: ggr
+    restart: unless-stopped
+    depends_on:
+      selenoid:
+        condition: service_started
+    ports:
+      - "4445:4444"
+    volumes:
+      - ./quota:/etc/grid-router/quota:ro
+    command:
+      - -listen=:4444
+      - -quotaDir=/etc/grid-router/quota
+      - -guests-allowed
+    networks:
+      - prestashop_network
+
+  ggr-ui:
+    image: aerokube/ggr-ui:latest
+    container_name: ggr_ui
+    restart: unless-stopped
+    depends_on:
+      - ggr
+    ports:
+      - "8889:8888"
+    volumes:
+      - ./quota:/etc/grid-router/quota:ro
+    networks:
+      - prestashop_network
+
   tests:
     build:
       context: .
@@ -219,6 +250,8 @@ volumes:
   prestashop_files:
   selenoid_logs:
   selenoid_video:
+  ggr_quota:
+  ggr_logs:
 
 networks:
   prestashop_network:
