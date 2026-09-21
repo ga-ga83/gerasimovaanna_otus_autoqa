@@ -5,7 +5,7 @@ import logging
 
 
 class CatalogPage(BasePage):
-    CLOTHES_LINK = (By.XPATH, "//a[@href='http://localhost:8081/3-clothes']")
+    CLOTHES_LINK = (By.XPATH, "//a[contains(@href, '/3-clothes')]")
     CATEGORIES_BLOCK = (By.CSS_SELECTOR, ".block-categories")
     SUBMENU_BLOCK = (By.CSS_SELECTOR, ".block-categories .category-sub-menu")
     BRANDS_BLOCK = (By.XPATH, "//div[@id='search_filters_brands']")

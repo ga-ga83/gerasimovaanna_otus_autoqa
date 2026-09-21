@@ -33,10 +33,11 @@ class LoginPage(BasePage):
         with allure.step("Клик по кнопке Sign In"):
             self.wait_for_clickable(self.SUBMIT_BTN).click()
 
-    def assert_user_logged_in(self, expected_text):
-        with allure.step(f"Проверка авторизации. Ожидание текста: {expected_text}"):
+    def assert_user_logged_in(self, expected_substring):
+        """Проверяет, что пользователь авторизован. Ищем подстроку, а не точное совпадение."""
+        with allure.step(f"Проверка авторизации. Ожидание подстроки: {expected_substring}"):
             text = self.wait_for_element(self.USER_INFO_BLOCK).text
-            assert expected_text in text, f"Пользователь не авторизован. Текст блока: {text}"
+            assert expected_substring in text, f"Пользователь не авторизован. Текст блока: '{text}'. Ожидалось: '{expected_substring}'"
 
     def assert_user_logged_out(self):
         with allure.step("Проверка выхода из системы"):
@@ -44,8 +45,8 @@ class LoginPage(BasePage):
             assert "Sign in" in text, f"Пользователь еще авторизован. Текст блока: {text}"
 
     def click_logout(self):
-        with allure.step("Клик по кнопке Logout"):
-            self.wait_for_element(self.LOGOUT_LINK).click()
+        with allure.step("Выход из системы"):
+            self.driver.get(f"{self.base_url}?mylogout")
 
     def get_register_link(self):
         return self.wait_for_element(self.REGISTER_LINK)

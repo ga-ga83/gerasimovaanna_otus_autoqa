@@ -1,0 +1,19 @@
+FROM python:3.12-slim
+
+# Устанавливаем зависимости, которые нужны для работы с браузером (если будешь без headless)
+# Для headless Chrome/Firefox обычно хватает chromium-driver, но можно добавить и браузер
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    gnupg \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Копируем requirements сразу, чтобы кэшировать слои при сборке
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Команда по умолчанию (переопределим в docker-compose)
+CMD ["python", "-m", "pytest"]

@@ -1,4 +1,4 @@
-FROM python:3.13-slim-trixie
+FROM python:3.11-slim-bookworm
 
 USER root
 
@@ -31,7 +31,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon0 \
     libpangocairo-1.0-0 \
     xdg-utils \
-    # Firefox ESR — доступен в репозиториях Debian Trixie
     firefox-esr \
     && rm -rf /var/lib/apt/lists/*
 
@@ -43,12 +42,12 @@ RUN wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-
     && rm -rf /var/lib/apt/lists/*
 
 # ── Python-зависимости ──
-RUN pip install --no-cache-dir pytest requests selenium allure-pytest
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
 # ── Создание непривилегированного пользователя ──
-# Chrome отказывается работать от root
 RUN groupadd -r testuser && useradd -r -g testuser -G audio,video testuser \
     && mkdir -p /home/testuser/Downloads \
     && chown -R testuser:testuser /home/testuser \

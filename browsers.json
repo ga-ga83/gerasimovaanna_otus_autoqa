@@ -1,0 +1,24 @@
+{
+  "chrome": {
+    "default": "128.0",
+    "versions": {
+      "128.0": {
+        "image": "selenoid/chrome:128.0",
+        "port": "4444",
+        "path": "/",
+        "tmpfs": {"/tmp": "size=512m"},
+        "shmSize": 268435456
+      }
+    }
+  },
+  "firefox": {
+    "default": "121.0",
+    "versions": {
+      "121.0": {
+        "image": "selenoid/firefox:121.0",
+        "port": "4444",
+        "path": "/"
+      }
+    }
+  }
+}
