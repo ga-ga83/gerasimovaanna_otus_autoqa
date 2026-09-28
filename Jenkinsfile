@@ -1,34 +1,48 @@
 pipeline {
     agent any
 
+    environment {
+        // Путь к портативному Python после распаковки — фиксируем один раз
+        PYTHON_HOME = "${WORKSPACE}/python"
+        PATH = "${PYTHON_HOME}/bin:${PATH}"
+    }
+
     stages {
         stage('Setup Portable Python') {
             steps {
-                // Скачиваем изолированный Python для Linux по прямой ссылке, так как в системе его нет
-                sh '''
-                echo "=== Скачиваем портативный Python ==="
-                curl -fsSL "https://github.com" -o python.tar.gz
+                script {
+                    // Выбираем стабильную версию Python (пример: 3.11.10)
+                    def pyVersion = '3.11.10'
+                    def fileName = "Python-${pyVersion}.tgz"
+                    def url = "https://www.python.org/ftp/python/${pyVersion}/${fileName}"
 
-                echo "=== Распаковываем Python ==="
-                tar -xzvf python.tar.gz
-                rm python.tar.gz
+                    sh """
+                        echo "=== Скачиваем портативный Python ${pyVersion} ==="
+                        curl -fsSL "${url}" -o "${fileName}"
 
-                echo "=== Проверяем работу Python ==="
-                ./python/bin/python3 --version
-                '''
+                        echo "=== Распаковываем Python ==="
+                        tar -xzvf "${fileName}"
+                        rm "${fileName}"
+
+                        # Переименовываем папку, чтобы путь был предсказуемым
+                        mv "Python-${pyVersion}" "python"
+
+                        echo "=== Проверяем работу Python ==="
+                        "${PYTHON_HOME}/bin/python3" --version
+                    """
+                }
             }
         }
 
         stage('Install Dependencies & Run Tests') {
             steps {
-                // Устанавливаем ваши зависимости Otus AutoQA и запускаем тесты напрямую
-                sh '''
-                echo "=== Устанавливаем зависимости из requirements.txt ==="
-                ./python/bin/python3 -m pip install --no-cache-dir -r requirements.txt
+                sh """
+                    echo "=== Устанавливаем зависимости из requirements.txt ==="
+                    "${PYTHON_HOME}/bin/python3" -m pip install --no-cache-dir -r requirements.txt
 
-                echo "=== Запускаем тесты Otus AutoQA ==="
-                ./python/bin/python3 -m pytest
-                '''
+                    echo "=== Запускаем тесты Otus AutoQA ==="
+                    "${PYTHON_HOME}/bin/python3" -m pytest
+                """
             }
         }
     }
