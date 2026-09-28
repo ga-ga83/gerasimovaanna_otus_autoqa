@@ -1,13 +1,8 @@
 pipeline {
     agent any
 
-    environment {
-        // Путь к портативному Python после распаковки — фиксируем один раз
-        PYTHON_HOME = "${WORKSPACE}/python"
-        PATH = "${PYTHON_HOME}/bin:${PATH}"
-    }
-
-    stage('Setup Portable Python') {
+    stages {
+        stage('Setup Portable Python') {
             steps {
                 script {
                     sh '''
@@ -27,13 +22,15 @@ pipeline {
 
         stage('Install Dependencies & Run Tests') {
             steps {
-                sh """
+                script {
+                    sh '''
                     echo "=== Устанавливаем зависимости из requirements.txt ==="
-                    "${PYTHON_HOME}/bin/python3" -m pip install --no-cache-dir -r requirements.txt
+                    ./python/bin/python3 -m pip install --no-cache-dir -r requirements.txt
 
                     echo "=== Запускаем тесты Otus AutoQA ==="
-                    "${PYTHON_HOME}/bin/python3" -m pytest
-                """
+                    ./python/bin/python3 -m pytest
+                    '''
+                }
             }
         }
     }
