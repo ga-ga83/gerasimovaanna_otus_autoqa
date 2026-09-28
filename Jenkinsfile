@@ -7,29 +7,20 @@ pipeline {
         PATH = "${PYTHON_HOME}/bin:${PATH}"
     }
 
-    stages {
-        stage('Setup Portable Python') {
+    stage('Setup Portable Python') {
             steps {
                 script {
-                    // Выбираем стабильную версию Python (пример: 3.11.10)
-                    def pyVersion = '3.11.10'
-                    def fileName = "Python-${pyVersion}.tgz"
-                    def url = "https://www.python.org/ftp/python/${pyVersion}/${fileName}"
+                    sh '''
+                    echo "=== Скачиваем портативный скомпилированный Python 3.10 ==="
+                    curl -fsSL "https://github.com" -o python.tar.gz
 
-                    sh """
-                        echo "=== Скачиваем портативный Python ${pyVersion} ==="
-                        curl -fsSL "${url}" -o "${fileName}"
+                    echo "=== Распаковываем Python ==="
+                    tar -xzvf python.tar.gz
+                    rm python.tar.gz
 
-                        echo "=== Распаковываем Python ==="
-                        tar -xzvf "${fileName}"
-                        rm "${fileName}"
-
-                        # Переименовываем папку, чтобы путь был предсказуемым
-                        mv "Python-${pyVersion}" "python"
-
-                        echo "=== Проверяем работу Python ==="
-                        "${PYTHON_HOME}/bin/python3" --version
-                    """
+                    echo "=== Проверяем работу портативного Python ==="
+                    ./python/bin/python3 --version
+                    '''
                 }
             }
         }
