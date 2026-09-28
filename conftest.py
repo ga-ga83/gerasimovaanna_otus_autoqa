@@ -67,6 +67,7 @@ def browser(request, base_url):
     browser_version = request.config.getoption("--browser-version")
 
     driver = None
+
     try:
         # ── Режим Selenoid (Remote WebDriver) ──
         if selenoid_url:
@@ -77,7 +78,6 @@ def browser(request, base_url):
             else:
                 pytest.exit(f"Unsupported browser: {browser_name}")
 
-            # Передаём capability для Selenoid: VNC, видео, логи
             options.set_capability("browserName", browser_name)
             if browser_version:
                 options.set_capability("browserVersion", browser_version)
@@ -92,7 +92,7 @@ def browser(request, base_url):
                 options=options,
             )
 
-        # ── Локальный режим (как раньше) ──
+        # ── Локальный режим ──
         else:
             if browser_name == "chrome":
                 options = ChromeOptions()
@@ -113,13 +113,14 @@ def browser(request, base_url):
                 pytest.exit(f"Unsupported browser: {browser_name}. Use: chrome, firefox")
 
         driver.base_url = base_url
-        yield driver
 
     except Exception as e:
         pytest.fail(f"Failed to initialize {browser_name} driver: {e}")
-    finally:
-        if driver is not None:
-            driver.quit()
+
+    yield driver
+
+    if driver is not None:
+        driver.quit()
 
 
 @pytest.fixture

@@ -12,12 +12,14 @@
     }
   },
   "firefox": {
-    "default": "121.0",
+    "default": "125.0",
     "versions": {
-      "121.0": {
-        "image": "selenoid/firefox:121.0",
+      "125.0": {
+        "image": "selenoid/firefox:125.0",
         "port": "4444",
-        "path": "/"
+        "path": "/wd/hub",
+        "tmpfs": {"/tmp": "size=512m"},
+        "shmSize": 268435456
       }
     }
   }
