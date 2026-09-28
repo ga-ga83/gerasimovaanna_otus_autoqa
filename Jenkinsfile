@@ -19,7 +19,6 @@ pipeline {
             agent { label 'docker-slave' }
             steps {
                 script {
-                    // Сборка образа с контекстом текущей директории, где лежит Dockerfile
                     sh "docker build -t ${FULL_IMAGE} ."
                 }
             }
@@ -29,9 +28,6 @@ pipeline {
             agent { label 'docker-slave' }
             steps {
                 script {
-                    // Запуск контейнера с пробросом volumes для отчётов/скриншотов (если тесты их создают)
-                    // --user testuser: запускаем как непривилегированный пользователь из Dockerfile
-                    // -e DISPLAY можно добавить, если тесты используют браузер в GUI-режиме (нужен VNC/Xvfb)
                     sh """
                         docker run --rm \\
                           --user testuser \\
@@ -43,8 +39,8 @@ pipeline {
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'reports/**/*', allowEmpty: true
-                    archiveArtifacts artifacts: 'screenshots/**/*', allowEmpty: true
+                    archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'screenshots/**/*', allowEmptyArchive: true
                 }
                 failure {
                     echo 'Тесты упали — проверь логи и скриншоты.'
@@ -55,7 +51,6 @@ pipeline {
 
     post {
         always {
-            // Очистка образов и контейнеров, чтобы не забивать диск
             script {
                 sh "docker rmi ${FULL_IMAGE} || true"
             }
