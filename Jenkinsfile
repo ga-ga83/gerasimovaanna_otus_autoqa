@@ -1,25 +1,34 @@
 pipeline {
-    agent none // Отключаем глобальный агент, чтобы сначала сделать checkout
+    agent any
 
     stages {
-        stage('Checkout') {
-            agent any // Используем любой доступный узел Jenkins для скачивания кода
+        stage('Setup Portable Python') {
             steps {
-                checkout scm // Скачиваем ваш репозиторий с Dockerfile
+                // Скачиваем изолированный Python для Linux по прямой ссылке, так как в системе его нет
+                sh '''
+                echo "=== Скачиваем портативный Python ==="
+                curl -fsSL "https://github.com" -o python.tar.gz
+
+                echo "=== Распаковываем Python ==="
+                tar -xzvf python.tar.gz
+                rm python.tar.gz
+
+                echo "=== Проверяем работу Python ==="
+                ./python/bin/python3 --version
+                '''
             }
         }
 
-        stage('Run tests') {
-            agent {
-                dockerfile {
-                    filename 'Dockerfile'
-                    dir '.'
-                    args '--user root'
-                }
-            }
+        stage('Install Dependencies & Run Tests') {
             steps {
-                // Теперь Dockerfile на месте, образ соберется, и запустятся тесты
-                sh 'pytest -v'
+                // Устанавливаем ваши зависимости Otus AutoQA и запускаем тесты напрямую
+                sh '''
+                echo "=== Устанавливаем зависимости из requirements.txt ==="
+                ./python/bin/python3 -m pip install --no-cache-dir -r requirements.txt
+
+                echo "=== Запускаем тесты Otus AutoQA ==="
+                ./python/bin/python3 -m pytest
+                '''
             }
         }
     }
