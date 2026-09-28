@@ -2,41 +2,16 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = 'otus-autoqa-tests'
+        PYTHON_HOME = "${WORKSPACE}/python"
     }
 
     stages {
-        stage('Build Docker Image') {
+        stage('Setup Environment') {
             steps {
                 sh '''
                 set -e
-                echo "=== Собираем Docker-образ ==="
-                docker build -t "${IMAGE_NAME}" .
-                '''
-            }
-        }
+                # 1. Ставим системные зависимости и браузеры
+                apt-get update
+                apt-get install -y wget gnupg ca-certificates curl unzip fonts-liberation libgtk-3-0 libnss3 firefox-esr
 
-        stage('Run Tests') {
-            steps {
-                sh '''
-                set -e
-                echo "=== Запускаем тесты из HW_8 ==="
-                docker run --rm \
-                  -v "${WORKSPACE}/HW_8:/app/HW_8" \
-                  -w /app \
-                  "${IMAGE_NAME}" \
-                  pytest HW_8/ -v
-                '''
-            }
-        }
-    }
-
-    post {
-        always {
-            echo "=== Сборка завершена, статус: ${currentBuild.result ?: 'SUCCESS'} ==="
-        }
-        cleanup {
-            sh 'docker rmi "${IMAGE_NAME}" 2>/dev/null || true'
-        }
-    }
-}
+                # Установка
