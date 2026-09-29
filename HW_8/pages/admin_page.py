@@ -73,12 +73,20 @@ class AdminPage(BasePage):
     def select_menu_block(self):
         with allure.step("Клик по меню (Admin Catalog)"):
             self.driver.switch_to.default_content()
-            # ВАЖНО: visibility_of_element_located, НЕ element_to_be_clickable!
-            # PrestaShop JS-обёртки мешают Selenium считать элемент "кликабельным".
-            el = WebDriverWait(self.driver, 15).until(
-                EC.visibility_of_element_located(self.MENU_BLOCK)
+
+            # Ждем, пока элемент появится в DOM и станет видимым
+            el = WebDriverWait(self.driver, 30).until(
+                lambda d: EC.presence_of_element_located(self.MENU_BLOCK)(d)
             )
+
+            # Дополнительная проверка: элемент не должен быть скрыт
+            if not el.is_displayed():
+                self.logger.warning("Элемент меню есть в DOM, но скрыт. Ждем явного появления.")
+                WebDriverWait(self.driver, 10).until(EC.visibility_of(el))
+
+            # Клик через JS — это самый надежный способ для PrestaShop
             self.driver.execute_script("arguments[0].click();", el)
+            time.sleep(1.5)  # Даем JS-меню раскрыться
 
     def subtab_catalog_click(self):
         with allure.step("Клик по меню Catalog -> Products"):
