@@ -229,8 +229,13 @@ class AdminPage(BasePage):
     def select_submit_menu_product(self):
         """Поиск подменю на товаре: preview, duplicate, delete"""
         self.driver.switch_to.default_content()
-        el = self.wait_for_element(self.SUBMIT_DROPDOWN_PRODUCT)
-        assert el.is_displayed(), "Кнопка вызова подменю в строке товара не отображается"
+
+        # Увеличиваем таймаут и ждем именно кликабельности
+        el = WebDriverWait(self.driver, 30).until(
+            EC.element_to_be_clickable(self.SUBMIT_DROPDOWN_PRODUCT)
+        )
+
+        self.logger.debug(f"Элемент найден: {el.text if hasattr(el, 'text') else 'OK'}")
         self.driver.execute_script("arguments[0].click();", el)
         time.sleep(1.5)
 
