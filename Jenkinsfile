@@ -51,56 +51,47 @@ pipeline {
         }
 
         stage('Run Tests') {
-            steps {
-                script {
-                    sh '''
-                        echo "=== Настройка PrestaShop ==="
-                        if docker ps -q -f name=prestashop | grep -q .; then
-                            docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
-                            docker exec prestashop rm -rf /var/www/html/var/cache/* 2>/dev/null || true
-                            echo "PrestaShop configured."
-                        else
-                            echo "Warning: PrestaShop container not found."
-                        fi
-                    '''
+    steps {
+        script {
+            // Сначала принудительно ставим права на папку Allure
+            sh "chmod -R 777 ${ALLURE_DIR}"
 
-                    def threads = params.THREADS_COUNT.toInteger()
+            sh '''
+                echo "=== Настройка PrestaShop ==="
+                if docker ps -q -f name=prestashop | grep -q .; then
+                    docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
+                    docker exec prestashop rm -rf /var/www/html/var/cache/* 2>/dev/null || true
+                    echo "PrestaShop configured."
+                else
+                    echo "Warning: PrestaShop container not found."
+                fi
+            '''
 
-                    def pytestArgs = [
-                        "HW_8/test_prestashop_all.py",
-                        "--base-url=${params.APP_URL}",
-                        "--browser=${params.BROWSER_NAME}",
-                        "--browser-version=${params.BROWSER_VERSION}",
-                        "--selenoid-url=${params.SELENOID_URL}",
-                        "-v",
-                        "--alluredir=/app/allure-results",
-                        "${params.HEADLESS_FLAG}".trim()
-                    ].findAll { it.trim() != '' }.join(' ')
+            def pytestArgs = [
+                "HW_8/test_prestashop_all.py",
+                "--base-url=${params.APP_URL}",
+                "--browser=${params.BROWSER_NAME}",
+                "--browser-version=${params.BROWSER_VERSION}",
+                "--selenoid-url=${params.SELENOID_URL}",
+                "-v",
+                "--alluredir=/app/allure-results",
+                "${params.HEADLESS_FLAG}".trim()
+            ].findAll { it.trim() != '' }.join(' ')
 
-                    sh """
-                        docker run --rm \\
-                          --user testuser \\
-                          --network ${NETWORK_NAME} \\
-                          -v ${REPORTS_DIR}:/app/reports \\
-                          -v ${ALLURE_DIR}:/app/allure-results \\
-                          -v ${SCREENSHOTS_DIR}:/app/screenshots \\
-                          ${FULL_IMAGE} \\
-                          python -m pytest ${pytestArgs}
-                    """
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
-                    archiveArtifacts artifacts: 'screenshots/**/*', allowEmptyArchive: true
-                    archiveArtifacts artifacts: 'allure-results/**/*', allowEmptyArchive: true
-                }
-                failure {
-                    echo 'Тесты упали.'
-                }
-            }
+            sh """
+                docker run --rm \\
+                  --user testuser \\
+                  --network ${NETWORK_NAME} \\
+                  -v ${REPORTS_DIR}:/app/reports \\
+                  -v ${ALLURE_DIR}:/app/allure-results \\
+                  -v ${SCREENSHOTS_DIR}:/app/screenshots \\
+                  ${FULL_IMAGE} \\
+                  python -m pytest ${pytestArgs}
+            """
         }
     }
+    // ... post всегда и т.д.
+
 
     post {
         always {
