@@ -6,6 +6,7 @@ pipeline {
         string(name: 'APP_URL', defaultValue: 'http://prestashop:80/', description: 'Адрес приложения')
         string(name: 'BROWSER_NAME', defaultValue: 'chrome', description: 'Браузер')
         string(name: 'BROWSER_VERSION', defaultValue: 'latest', description: 'Версия браузера')
+        // Исправлено: integer -> string
         string(name: 'THREADS_COUNT', defaultValue: '1', description: 'Количество потоков')
         string(name: 'HEADLESS_FLAG', defaultValue: '--headless', description: 'Флаг headless')
     }
@@ -39,7 +40,10 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 script {
+                    // Создаем папки
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
+
+                    // ВАЖНО: Даем полные права на папки allure-results
                     sh "chmod -R 777 ${ALLURE_DIR}"
 
                     def networkExists = sh(script: "docker network ls --format '{{.Name}}' | grep -q '^${NETWORK_NAME}\$'", returnStatus: true) == 0
@@ -51,47 +55,57 @@ pipeline {
         }
 
         stage('Run Tests') {
-    steps {
-        script {
-            // Сначала принудительно ставим права на папку Allure
-            sh "chmod -R 777 ${ALLURE_DIR}"
+            steps {
+                script {
+                    // Принудительно ставим права перед запуском (страховка)
+                    sh "chmod -R 777 ${ALLURE_DIR}"
 
-            sh '''
-                echo "=== Настройка PrestaShop ==="
-                if docker ps -q -f name=prestashop | grep -q .; then
-                    docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
-                    docker exec prestashop rm -rf /var/www/html/var/cache/* 2>/dev/null || true
-                    echo "PrestaShop configured."
-                else
-                    echo "Warning: PrestaShop container not found."
-                fi
-            '''
+                    sh '''
+                        echo "=== Настройка PrestaShop ==="
+                        if docker ps -q -f name=prestashop | grep -q .; then
+                            docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
+                            docker exec prestashop rm -rf /var/www/html/var/cache/* 2>/dev/null || true
+                            echo "PrestaShop configured."
+                        else
+                            echo "Warning: PrestaShop container not found."
+                        fi
+                    '''
 
-            def pytestArgs = [
-                "HW_8/test_prestashop_all.py",
-                "--base-url=${params.APP_URL}",
-                "--browser=${params.BROWSER_NAME}",
-                "--browser-version=${params.BROWSER_VERSION}",
-                "--selenoid-url=${params.SELENOID_URL}",
-                "-v",
-                "--alluredir=/app/allure-results",
-                "${params.HEADLESS_FLAG}".trim()
-            ].findAll { it.trim() != '' }.join(' ')
+                    def pytestArgs = [
+                        "HW_8/test_prestashop_all.py",
+                        "--base-url=${params.APP_URL}",
+                        "--browser=${params.BROWSER_NAME}",
+                        "--browser-version=${params.BROWSER_VERSION}",
+                        "--selenoid-url=${params.SELENOID_URL}",
+                        "-v",
+                        "--alluredir=/app/allure-results",
+                        "${params.HEADLESS_FLAG}".trim()
+                    ].findAll { it.trim() != '' }.join(' ')
 
-            sh """
-                docker run --rm \\
-                  --user testuser \\
-                  --network ${NETWORK_NAME} \\
-                  -v ${REPORTS_DIR}:/app/reports \\
-                  -v ${ALLURE_DIR}:/app/allure-results \\
-                  -v ${SCREENSHOTS_DIR}:/app/screenshots \\
-                  ${FULL_IMAGE} \\
-                  python -m pytest ${pytestArgs}
-            """
+                    // Вариант 1: Запуск от root (чтобы избежать проблем с правами testuser)
+                    sh """
+                        docker run --rm \\
+                          --network ${NETWORK_NAME} \\
+                          -v ${REPORTS_DIR}:/app/reports \\
+                          -v ${ALLURE_DIR}:/app/allure-results \\
+                          -v ${SCREENSHOTS_DIR}:/app/screenshots \\
+                          ${FULL_IMAGE} \\
+                          python -m pytest ${pytestArgs}
+                    """
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'screenshots/**/*', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'allure-results/**/*', allowEmptyArchive: true
+                }
+                failure {
+                    echo 'Тесты упали.'
+                }
+            }
         }
     }
-    // ... post всегда и т.д.
-
 
     post {
         always {
