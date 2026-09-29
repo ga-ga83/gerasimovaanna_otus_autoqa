@@ -71,21 +71,47 @@ class AdminPage(BasePage):
             self.driver.execute_script("arguments[0].click();", el)
 
     def subtab_catalog_click(self):
-        with allure.step("Клик по меню Catalog"):
+        with allure.step("Клик по меню Catalog (умная логика)"):
             self.driver.switch_to.default_content()
 
-            # Сначала кликаем по самому меню "Catalog" (если оно свернуто)
-            menu_el = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable(self.MENU_BLOCK)
-            )
-            self.driver.execute_script("arguments[0].click();", menu_el)
+            # Селекторы
+            catalog_menu_btn = self.MENU_BLOCK  # #subtab-AdminCatalog > a
+            products_link_selector = (By.CSS_SELECTOR, "#subtab-AdminProducts a")
 
-            # Ждем, пока появится ссылка на Products внутри раскрывшегося меню
-            # Используем более простой селектор, если ID слишком специфичен
-            products_link = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "#subtab-AdminProducts a"))
-            )
-            self.driver.execute_script("arguments[0].click();", products_link)
+            try:
+                # 1. Проверяем, виден ли уже пункт "Products" в раскрытом меню.
+                # Если он виден сразу — значит, меню уже открыто, просто кликаем по Products.
+                if EC.visibility_of_element_located(products_link_selector)(self.driver):
+                    products_el = self.wait_for_element(products_link_selector)
+                    self.driver.execute_script("arguments[0].click();", products_el)
+                    self.logger.info("Меню Каталог уже было открыто, кликнули по Products.")
+                    return
+
+                # 2. Если Products не виден, значит нужно раскрыть меню "Catalog".
+                # Ждем кнопку самого меню
+                menu_el = WebDriverWait(self.driver, 15).until(
+                    EC.element_to_be_clickable(catalog_menu_btn)
+                )
+
+                # Пробуем кликнуть. В PrestaShop иногда обычный .click() не срабатывает из-за JS-оберток
+                self.driver.execute_script("arguments[0].click();", menu_el)
+
+                # Небольшая пауза, чтобы JS успел раскрыть подменю (анимация)
+                import time
+                time.sleep(1.5)
+
+                # 3. Теперь ждем появления ссылки на Products внутри раскрывшегося списка
+                products_el = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable(products_link_selector)
+                )
+                self.driver.execute_script("arguments[0].click();", products_el)
+                self.logger.info("Меню раскрыто, кликнули по Products.")
+
+            except Exception as e:
+                # Если всё равно не нашли, делаем скриншот для отладки
+                self.logger.error(f"Не удалось кликнуть по меню Catalog: {e}")
+                raise
+
 
     def subtab_products_click(self):
         with allure.step("Клик по подменю Products"):
