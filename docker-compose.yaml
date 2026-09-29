@@ -102,11 +102,12 @@ services:
     volumes:
       - prestashop_files:/var/www/html
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80"]
+      # Проверяем именно страницу входа в админку!
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/administration/index.php?controller=AdminLogin"]
       interval: 15s
       timeout: 10s
       retries: 40
-      start_period: 120s
+      start_period: 180s  # Даем до 3 минут на установку (PS_INSTALL_TIMEOUT=600)
     dns:
       - 8.8.8.8
       - 1.1.1.1
