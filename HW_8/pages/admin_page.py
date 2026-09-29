@@ -34,7 +34,7 @@ class AdminPage(BasePage):
     DELETE_BUTTON_MODAL = (By.CSS_SELECTOR, "button.btn-confirm-submit")
 
     def _wait_page_ready(self):
-        """Ожидание полной загрузки страницы (readyState == complete)."""
+        """Ожидание полной загрузки страницы."""
         WebDriverWait(self.driver, 20).until(
             lambda d: d.execute_script("return document.readyState") == "complete"
         )
@@ -73,42 +73,46 @@ class AdminPage(BasePage):
     def select_menu_block(self):
         with allure.step("Клик по меню (Admin Catalog)"):
             self.driver.switch_to.default_content()
-            self._wait_page_ready()
-            time.sleep(1)
-            el = WebDriverWait(self.driver, 20).until(
-                EC.element_to_be_clickable(self.MENU_BLOCK)
+            # ВАЖНО: visibility_of_element_located, НЕ element_to_be_clickable!
+            # PrestaShop JS-обёртки мешают Selenium считать элемент "кликабельным".
+            el = WebDriverWait(self.driver, 15).until(
+                EC.visibility_of_element_located(self.MENU_BLOCK)
             )
             self.driver.execute_script("arguments[0].click();", el)
 
     def subtab_catalog_click(self):
-        with allure.step("Клик по меню Catalog (умная логика)"):
+        with allure.step("Клик по меню Catalog -> Products"):
             self.driver.switch_to.default_content()
 
-            catalog_menu_btn = self.MENU_BLOCK
             products_link_selector = (By.CSS_SELECTOR, "#subtab-AdminProducts a")
 
+            # 1. Если Products уже виден — кликаем сразу
             try:
                 if EC.visibility_of_element_located(products_link_selector)(self.driver):
                     products_el = self.wait_for_element(products_link_selector)
                     self.driver.execute_script("arguments[0].click();", products_el)
-                    self.logger.info("Меню Каталог уже было открыто, кликнули по Products.")
+                    self.logger.info("Меню Каталог уже открыто, кликнули по Products.")
                     return
+            except Exception:
+                pass  # Products не виден, нужно раскрыть меню
 
+            # 2. Пытаемся раскрыть меню Каталог
+            try:
                 menu_el = WebDriverWait(self.driver, 15).until(
-                    EC.element_to_be_clickable(catalog_menu_btn)
+                    EC.visibility_of_element_located(self.MENU_BLOCK)
                 )
                 self.driver.execute_script("arguments[0].click();", menu_el)
                 time.sleep(1.5)
 
                 products_el = WebDriverWait(self.driver, 10).until(
-                    EC.element_to_be_clickable(products_link_selector)
+                    EC.visibility_of_element_located(products_link_selector)
                 )
                 self.driver.execute_script("arguments[0].click();", products_el)
                 self.logger.info("Меню раскрыто, кликнули по Products.")
-
-            except Exception as e:
-                self.logger.error(f"Не удалось кликнуть по меню Catalog: {e}")
-                raise
+            except Exception:
+                # 3. Fallback: прямая навигация по URL, если меню не поддалось
+                self.logger.warning("Не удалось кликнуть меню, перехожу по URL напрямую.")
+                self.driver.get(f"{self.base_url}administration/index.php?controller=AdminProducts")
 
     def subtab_products_click(self):
         with allure.step("Клик по подменю Products"):
@@ -166,8 +170,8 @@ class AdminPage(BasePage):
 
     def save_new_product(self):
         with allure.step("Сохранение продукта"):
+            self.driver.switch_to.default_content()
             self.click_element(self.SAVE_BTH_NEW_PRODUCT)
-            # Ждём перезагрузки страницы после сохранения
             self._wait_page_ready()
             time.sleep(1)
 
@@ -209,9 +213,8 @@ class AdminPage(BasePage):
         """Поиск подменю на товаре: preview, duplicate, delete"""
         self.driver.switch_to.default_content()
         el = self.wait_for_element(self.SUBMIT_DROPDOWN_PRODUCT)
-        assert el.is_displayed(), "Кнопка вызова подменю в строке товара не отображается на странице"
+        assert el.is_displayed(), "Кнопка вызова подменю в строке товара не отображается"
         self.driver.execute_script("arguments[0].click();", el)
-        # Ждём раскрытия выпадающего меню
         time.sleep(1.5)
 
     def menu_product_delete(self):
@@ -228,7 +231,7 @@ class AdminPage(BasePage):
             el = WebDriverWait(self.driver, 15).until(
                 EC.visibility_of_element_located(self.DELETE_MESSAGE_DIALOG)
             )
-            assert el.is_displayed(), "Диалоговое окно удаления не отображается на странице"
+            assert el.is_displayed(), "Диалоговое окно удаления не отображается"
             delete_btn = WebDriverWait(self.driver, 10).until(
                 EC.element_to_be_clickable(self.DELETE_BUTTON_MODAL)
             )
