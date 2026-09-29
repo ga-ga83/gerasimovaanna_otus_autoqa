@@ -39,6 +39,7 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 script {
+                    // Очищаем папку результатов перед запуском
                     sh "rm -rf ${ALLURE_DIR}/*"
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                     sh "chmod -R 777 ${ALLURE_DIR}"
@@ -67,8 +68,6 @@ pipeline {
                         fi
                     '''
 
-                    def threads = params.THREADS_COUNT.toInteger()
-
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
@@ -90,6 +89,18 @@ pipeline {
                           ${FULL_IMAGE} \\
                           python -m pytest ${pytestArgs}
                     """
+
+                    // ОТЛАДКА: Проверяем, что файлы результатов реально созданы
+                    echo "--- Содержимое папки allure-results ---"
+                    sh "ls -la ${ALLURE_DIR}/"
+
+                    echo "--- Количество файлов результатов (*-result.json) ---"
+                    def count = sh(script: "find ${ALLURE_DIR} -name '*-result.json' | wc -l", returnStdout: true).trim()
+                    echo "Найдено JSON-файлов результатов: ${count}"
+
+                    if (count.toInteger() == 0) {
+                        error "ОШИБКА: В папке allure-results нет файлов *-result.json. Тесты не записали результаты."
+                    }
                 }
             }
             post {
@@ -110,13 +121,14 @@ pipeline {
             script {
                 sh "docker rmi ${FULL_IMAGE} || true"
 
+                // ВАЖНО: Имя должно ТОЧНО совпадать с тем, что есть в Manage Jenkins -> Tools
                 allure([
                     includeProperties: false,
                     jdk: '',
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
                     results: [[path: 'allure-results']],
-                    commandline: 'Allure 2.46.0'
+                    commandline: 'Allure 2.29.0'  // <-- Используем именно эту версию
                 ])
             }
         }
