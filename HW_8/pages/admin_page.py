@@ -85,9 +85,9 @@ class AdminPage(BasePage):
         with allure.step("Клик по меню (Admin Catalog)"):
             self.driver.switch_to.default_content()
 
-            # Если уже в разделе Catalog/Products — повторный клик не нужен
             current_url = self.driver.current_url
-            if "AdminCatalog" in current_url or "catalog/products" in current_url:
+            # Если уже в разделе Catalog/Products (но НЕ на странице редактирования) — клик не нужен
+            if ("AdminCatalog" in current_url or "catalog/products" in current_url) and "/edit" not in current_url:
                 self.logger.info("Уже в разделе Catalog, повторный клик не нужен.")
                 return
 
@@ -99,7 +99,6 @@ class AdminPage(BasePage):
 
             self.logger.info(f"select_menu_block: URL={self.driver.current_url}, Title={self.driver.title}")
 
-            # Стратегия 1: по ID элемента
             link = self.driver.execute_script(
                 'var a = document.querySelector("#subtab-AdminCatalog a"); return a || null;'
             )
@@ -109,7 +108,6 @@ class AdminPage(BasePage):
                 time.sleep(2.5)
                 return
 
-            # Стратегия 2: по href содержит AdminCatalog (legacy URL)
             link = self.driver.execute_script(
                 "var a = document.querySelector('a[href*=\"AdminCatalog\"]'); return a || null;"
             )
@@ -119,7 +117,6 @@ class AdminPage(BasePage):
                 time.sleep(2.5)
                 return
 
-            # Стратегия 3: по тексту ссылки
             link = self.driver.execute_script(
                 "var links = document.querySelectorAll('#header ul a, .sidebar a, nav a'); "
                 "for (var i = 0; i < links.length; i++) { "
@@ -132,7 +129,6 @@ class AdminPage(BasePage):
                 time.sleep(2.5)
                 return
 
-            # Стратегия 4: ждём появления через WebDriverWait
             link = WebDriverWait(self.driver, 30).until(
                 lambda d: d.execute_script(
                     'var a = document.querySelector("#subtab-AdminCatalog a, a[href*=\"AdminCatalog\"]"); '
@@ -148,12 +144,11 @@ class AdminPage(BasePage):
         with allure.step("Переход к Products (Catalog -> Products)"):
             self.driver.switch_to.default_content()
 
-            # Проверяем, не на странице ли мы уже
             current_url = self.driver.current_url
-            if "catalog/products" in current_url or "AdminProducts" in current_url:
-                if "Invalid" not in self.driver.title:
-                    self.logger.info("Уже на странице Products.")
-                    return
+            # Если уже на странице Products (но НЕ на странице редактирования) — клик не нужен
+            if ("catalog/products" in current_url or "AdminProducts" in current_url) and "/edit" not in current_url:
+                self.logger.info("Уже на странице Products.")
+                return
 
             # Способ 1: по ID элемента
             link = self.driver.execute_script(
@@ -224,9 +219,9 @@ class AdminPage(BasePage):
         with allure.step("Клик по подменю Products"):
             self.driver.switch_to.default_content()
 
-            # Если уже на странице Products — клик не нужен
             current_url = self.driver.current_url
-            if "catalog/products" in current_url or "AdminProducts" in current_url:
+            # Если уже на странице Products (но НЕ на странице редактирования) — клик не нужен
+            if ("catalog/products" in current_url or "AdminProducts" in current_url) and "/edit" not in current_url:
                 self.logger.info("Уже на странице Products, клик по подменю не нужен.")
                 return self
 
