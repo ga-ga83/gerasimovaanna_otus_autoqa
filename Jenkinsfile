@@ -39,6 +39,7 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 script {
+                    sh "rm -rf ${ALLURE_DIR}/*"
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                     sh "chmod -R 777 ${ALLURE_DIR}"
 
@@ -114,7 +115,8 @@ pipeline {
                     jdk: '',
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
-                    results: [[path: 'allure-results']]
+                    results: [[path: 'allure-results']],
+                    commandline: '3.16.0'
                 ])
             }
         }
