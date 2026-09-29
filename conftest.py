@@ -21,41 +21,15 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-_log = logging.getLogger(__name__)   # <-- переименовано: было logger, стало _log
+_log = logging.getLogger(__name__)
 
 
 def pytest_addoption(parser):
-    parser.addoption(
-        "--browser",
-        action="store",
-        default="chrome",
-        choices=["chrome", "firefox"],
-        help="Browser to run tests with: chrome, firefox"
-    )
-    parser.addoption(
-        "--base-url",
-        action="store",
-        default="http://prestashop:80",
-        help="Base URL for tests"
-    )
-    parser.addoption(
-        "--headless",
-        action="store_true",
-        default=True,
-        help="Run browser in headless mode"
-    )
-    parser.addoption(
-        "--selenoid-url",
-        action="store",
-        default=None,
-        help="Selenoid URL (e.g. http://selenoid:4444/wd/hub). If not set, runs locally."
-    )
-    parser.addoption(
-        "--browser-version",
-        action="store",
-        default="",
-        help="Browser version for Selenoid (e.g. 128.0)"
-    )
+    parser.addoption("--browser", action="store", default="chrome", choices=["chrome", "firefox"], help="Browser to run tests with")
+    parser.addoption("--base-url", action="store", default="http://prestashop:80", help="Base URL for tests")
+    parser.addoption("--headless", action="store_true", default=True, help="Run browser in headless mode")
+    parser.addoption("--selenoid-url", action="store", default=None, help="Selenoid URL")
+    parser.addoption("--browser-version", action="store", default="", help="Browser version for Selenoid")
 
 
 @pytest.fixture(scope="session")
@@ -75,7 +49,6 @@ def browser(request, base_url):
     driver = None
 
     try:
-        # ── Режим Selenoid (Remote WebDriver) ──
         if selenoid_url:
             if browser_name == "chrome":
                 options = ChromeOptions()
@@ -92,89 +65,9 @@ def browser(request, base_url):
                 "enableVideo": False,
                 "enableLog": True,
             })
-
-            _log.info(f"Connecting to Selenoid at {selenoid_url} with {browser_name} v{browser_version or 'latest'}")
-            driver = webdriver.Remote(
-                command_executor=selenoid_url,
-                options=options,
-            )
-
-        # ── Локальный режим ──
+            _log.info(f"Connecting to Selenoid: {selenoid_url}")
+            driver = webdriver.Remote(command_executor=selenoid_url, options=options)
         else:
-            _log.info(f"Starting local {browser_name} browser in {'headless' if headless else 'normal'} mode")
+            _log.info(f"Starting local {browser_name} (headless={headless})")
             if browser_name == "chrome":
                 options = ChromeOptions()
-                if headless:
-                    options.add_argument("--headless=new")
-                options.add_argument("--no-sandbox")
-                options.add_argument("--disable-dev-shm-usage")
-                options.add_argument("--disable-gpu")
-                driver = webdriver.Chrome(options=options)
-
-            elif browser_name == "firefox":
-                options = FirefoxOptions()
-                if headless:
-                    options.add_argument("--headless")
-                driver = webdriver.Firefox(options=options)
-
-            else:
-                pytest.fail(f"Unsupported browser: {browser_name}. Use: chrome, firefox")
-
-        driver.base_url = base_url
-
-    except WebDriverException as e:
-        pytest.fail(f"Failed to initialize {browser_name} driver: {e}")
-    except Exception as e:
-        pytest.fail(f"Unexpected error while initializing browser: {e}")
-
-    yield driver
-
-    if driver is not None:
-        try:
-            driver.quit()
-        except Exception as e:
-            _log.warning(f"Error while closing driver: {e}")
-
-
-@pytest.fixture
-def pages(browser, base_url):
-    page_logger = logging.getLogger("PageObjects")
-    return {
-        "home": HomePage(browser, base_url, page_logger),
-        "catalog": CatalogPage(browser, base_url, page_logger),
-        "product": ProductPage(browser, base_url, page_logger),
-        "login": LoginPage(browser, base_url, page_logger),
-        "registration": RegistrationPage(browser, base_url, page_logger),
-        "administration": AdminPage(browser, base_url, page_logger)
-    }
-
-
-@pytest.fixture()
-def logger():
-    return logging.getLogger(__name__)
-
-
-@pytest.hookimpl(tryfirst=True, hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    outcome = yield
-    rep = outcome.get_result()
-
-    if rep.when == "call" and rep.failed:
-        try:
-            pages_fixture = item.funcargs.get("pages")
-            if pages_fixture:
-                driver = next(iter(pages_fixture.values())).driver
-                if driver:
-                    screenshot = driver.get_screenshot_as_png()
-                    allure.attach(
-                        screenshot,
-                        name=f'Screenshot_on_failure_{item.name}',
-                        attachment_type=allure.attachment_type.PNG
-                    )
-                    _log.info(f"Screenshot attached for failed test: {item.name}")
-                else:
-                    _log.warning("Could not take screenshot: driver is None")
-            else:
-                _log.warning("Could not take screenshot: 'pages' fixture was not available")
-        except Exception as e:
-            _log.error(f"Error attaching screenshot: {e}")
