@@ -31,10 +31,19 @@ pipeline {
                     // Проверяем, что сеть существует
                     def networkExists = sh(script: "docker network ls --format '{{.Name}}' | grep -q '^${NETWORK_NAME}\$'", returnStatus: true) == 0
                     if (!networkExists) {
-                        error "Сеть ${NETWORK_NAME} не найдена! Сначала запусти PrestaShop через docker compose."
+                        error "Сеть ${NETWORK_NAME} не найдена! Сначала запуши PrestaShop через docker compose."
                     }
 
-                    // Запускаем тесты в сети prestashop_network
+                    // Отключаем debug mode в PrestaShop, чтобы убрать Symfony Web Debug Toolbar
+                    // (он перекрывает кнопки админки → ElementClickInterceptedException)
+                    // и ускорить загрузку страниц (→ TimeoutException)
+                    sh '''
+                        docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php || true
+                        docker exec prestashop rm -rf /var/www/html/var/cache/* || true
+                        echo "PrestaShop debug mode disabled, cache cleared"
+                    '''
+
+                    // Запускаем тесты
                     sh """
                         docker run --rm \\
                           --user testuser \\
