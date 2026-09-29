@@ -77,60 +77,77 @@ class AdminPage(BasePage):
         return self.wait_for_element(self.DEMO_BTH)
 
     def select_menu_block(self):
+        """Клик по меню Catalog — ищем ссылку по href, а не по CSS-селектору."""
         with allure.step("Клик по меню (Admin Catalog)"):
             self.driver.switch_to.default_content()
-
-            # Логируем URL и заголовок для отладки
             self.logger.info(f"select_menu_block: URL={self.driver.current_url}, Title={self.driver.title}")
 
-            menu_el = WebDriverWait(self.driver, 30).until(
-                EC.element_to_be_clickable(self.MENU_BLOCK)
+            # Ищем ссылку, в href которой есть AdminCatalog — в ней уже есть токен
+            link = WebDriverWait(self.driver, 30).until(
+                lambda d: d.execute_script(
+                    "var a = document.querySelector('a[href*=\"AdminCatalog\"]'); "
+                    "return a && a.offsetParent !== null ? a : null;"
+                )
             )
-            self.logger.info("Элемент меню найден и готов к клику.")
-            self.driver.execute_script("arguments[0].click();", menu_el)
+            self.driver.execute_script("arguments[0].click();", link)
+            self.logger.info("Клик по ссылке Catalog выполнен.")
             time.sleep(2.5)
 
+
     def subtab_catalog_click(self):
+        """Переход к Products — ищем прямую ссылку с токеном в HTML."""
         with allure.step("Переход к Products (Catalog -> Products)"):
             self.driver.switch_to.default_content()
-            current_url = self.driver.current_url
 
-            if "controller=AdminProducts" in current_url or "catalog/products" in current_url:
-                self.logger.info("Уже на странице Products, пропускаем навигацию.")
-                self.wait_for_element(self.PRODUCTS_PAGE_ADMIN)
+            # Проверяем, не на странице ли мы уже
+            if "AdminProducts" in self.driver.current_url and "Invalid" not in self.driver.title:
+                self.logger.info("Уже на странице Products.")
                 return
 
+            # Способ 1: прямая ссылка на AdminProducts видна в меню
+            link = self.driver.execute_script(
+                "var a = document.querySelector('a[href*=\"AdminProducts\"]'); "
+                "return a || null;"
+            )
+            if link:
+                self.driver.execute_script("arguments[0].click();", link)
+                self.logger.info("Кликнули по прямой ссылке на Products.")
+                self._wait_page_ready()
+                time.sleep(2)
+                return
+
+            # Способ 2: раскрываем Catalog, потом ищем Products
             try:
-                if EC.visibility_of_element_located(self.PRODUCTS_SUBTAB_LINK)(self.driver):
-                    el = self.wait_for_element(self.PRODUCTS_SUBTAB_LINK)
-                    self.driver.execute_script("arguments[0].click();", el)
-                    self.logger.info("Кликнули по Products напрямую.")
-                    return
-
                 self.select_menu_block()
-
-                products_el = WebDriverWait(self.driver, 15).until(
-                    EC.element_to_be_clickable(self.PRODUCTS_SUBTAB_LINK)
+                time.sleep(1)
+                link = self.driver.execute_script(
+                    "var a = document.querySelector('a[href*=\"AdminProducts\"]'); "
+                    "return a || null;"
                 )
-                self.driver.execute_script("arguments[0].click();", products_el)
-                self.logger.info("Меню раскрыто, кликнули по Products.")
+                if link:
+                    self.driver.execute_script("arguments[0].click();", link)
+                    self.logger.info("Меню раскрыто, кликнули по Products.")
+                    self._wait_page_ready()
+                    time.sleep(2)
+                    return
+            except Exception:
+                pass
 
-            except Exception as e:
-                self.logger.warning(f"Не удалось кликнуть меню ({e}), переходим по URL напрямую.")
+            # Способ 3: извлекаем токен из ссылки AdminProducts (даже если она скрыта)
+            href = self.driver.execute_script(
+                "var a = document.querySelector('a[href*=\"AdminProducts\"]'); "
+                "return a ? a.getAttribute('href') : null;"
+            )
+            if href:
+                full_url = href if href.startswith("http") else f"{self.base_url}administration/{href.lstrip('/')}"
+                self.driver.get(full_url)
+                self.logger.info(f"Переход по URL с токеном из ссылки: {full_url}")
+                self._wait_page_ready()
+                time.sleep(2)
+                return
 
-                # Логируем состояние ДО перехода
-                self.logger.warning(f"До fallback: URL={self.driver.current_url}, Title={self.driver.title}")
+            raise TimeoutException("Не удалось найти ссылку на AdminProducts")
 
-                self.driver.get(f"{self.base_url}administration/index.php?controller=AdminProducts")
-
-                # Логируем состояние ПОСЛЕ перехода
-                self.logger.warning(f"После fallback: URL={self.driver.current_url}, Title={self.driver.title}")
-
-                # Ждем любой маркер страницы продуктов
-                WebDriverWait(self.driver, 30).until(
-                    EC.presence_of_element_located(self.NEW_PRODUCT_BUTTON)
-                )
-                self.logger.info("Прямой переход выполнен, страница Products загружена.")
 
     def check_product_page(self):
         with allure.step("Проверка перехода на страницу Products"):
@@ -250,20 +267,24 @@ class AdminPage(BasePage):
 
     def menu_product_delete(self):
         self.driver.switch_to.default_content()
+
+        # Ждем появления кнопки меню удаления
         el = WebDriverWait(self.driver, 15).until(
             EC.visibility_of_element_located(self.DELETE_BTH_MENU)
         )
+
+        # Кликаем по кнопке меню удаления
         self.driver.execute_script("arguments[0].click();", el)
 
-    def modal_dialog_delete(self):
-        with allure.step("Подтверждение удаления товара"):
-            self.driver.switch_to.default_content()
-            el = WebDriverWait(self.driver, 15).until(
-                EC.visibility_of_element_located(self.DELETE_MESSAGE_DIALOG)
-            )
-            assert el.is_displayed(), "Диалоговое окно удаления не отображается"
-            delete_btn = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable(self.DELETE_BUTTON_MODAL)
-            )
-            delete_btn.click()
-            return self
+        # Ждем появления модального окна подтверждения
+        delete_message_dialog = WebDriverWait(self.driver, 15).until(
+            EC.visibility_of_element_located(self.DELETE_MESSAGE_DIALOG)
+        )
+
+        assert delete_message_dialog.is_displayed(), "Диалоговое окно удаления не отображается"
+
+        # Нажимаем кнопку подтверждения в модальном окне
+        delete_btn = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable(self.DELETE_BUTTON_MODAL)
+        )
+        delete_btn.click()
