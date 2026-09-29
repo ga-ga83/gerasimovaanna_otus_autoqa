@@ -223,6 +223,13 @@ class AdminPage(BasePage):
     def subtab_products_click(self):
         with allure.step("Клик по подменю Products"):
             self.driver.switch_to.default_content()
+
+            # Если уже на странице Products — клик не нужен
+            current_url = self.driver.current_url
+            if "catalog/products" in current_url or "AdminProducts" in current_url:
+                self.logger.info("Уже на странице Products, клик по подменю не нужен.")
+                return self
+
             el = WebDriverWait(self.driver, 10).until(
                 EC.visibility_of_element_located(self.PRODUCTS_SUBTAB)
             )
