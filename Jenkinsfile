@@ -6,7 +6,7 @@ pipeline {
         string(name: 'APP_URL', defaultValue: 'http://prestashop:80/', description: 'Адрес приложения')
         string(name: 'BROWSER_NAME', defaultValue: 'chrome', description: 'Браузер')
         string(name: 'BROWSER_VERSION', defaultValue: 'latest', description: 'Версия браузера')
-        integer(name: 'THREADS_COUNT', defaultValue: 1, description: 'Количество потоков')
+        string(name: 'THREADS_COUNT', defaultValue: '1', description: 'Количество потоков')
         string(name: 'HEADLESS_FLAG', defaultValue: '--headless', description: 'Флаг headless')
     }
 
@@ -16,7 +16,6 @@ pipeline {
         FULL_IMAGE = "${IMAGE_NAME}:${IMAGE_TAG}"
         NETWORK_NAME = 'prestashop_network'
 
-        // Пути для маппинга
         REPORTS_DIR = "${WORKSPACE}/reports"
         ALLURE_DIR = "${WORKSPACE}/allure-results"
         SCREENSHOTS_DIR = "${WORKSPACE}/screenshots"
@@ -40,11 +39,7 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 script {
-                    // Создаем папки
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-
-                    // ВАЖНО: Даем полные права на папки allure-results, чтобы testuser мог писать туда
-                    // Без этого может быть ошибка Permission Denied
                     sh "chmod -R 777 ${ALLURE_DIR}"
 
                     def networkExists = sh(script: "docker network ls --format '{{.Name}}' | grep -q '^${NETWORK_NAME}\$'", returnStatus: true) == 0
@@ -58,7 +53,6 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // Отключение debug mode PrestaShop (как в вашем коде)
                     sh '''
                         echo "=== Настройка PrestaShop ==="
                         if docker ps -q -f name=prestashop | grep -q .; then
@@ -70,7 +64,8 @@ pipeline {
                         fi
                     '''
 
-                    // Сборка команды pytest
+                    def threads = params.THREADS_COUNT.toInteger()
+
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
@@ -78,7 +73,7 @@ pipeline {
                         "--browser-version=${params.BROWSER_VERSION}",
                         "--selenoid-url=${params.SELENOID_URL}",
                         "-v",
-                        "--alluredir=/app/allure-results", // Путь ВНУТРИ контейнера
+                        "--alluredir=/app/allure-results",
                         "${params.HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
 
@@ -112,8 +107,6 @@ pipeline {
             script {
                 sh "docker rmi ${FULL_IMAGE} || true"
 
-                // Генерация Allure Report
-                // Путь 'allure-results' здесь относится к WORKSPACE на мастере Jenkins
                 allure([
                     includeProperties: false,
                     jdk: '',
