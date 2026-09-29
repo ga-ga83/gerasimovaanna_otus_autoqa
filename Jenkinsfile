@@ -6,7 +6,6 @@ pipeline {
         string(name: 'APP_URL', defaultValue: 'http://prestashop:80/', description: 'Адрес приложения')
         string(name: 'BROWSER_NAME', defaultValue: 'chrome', description: 'Браузер')
         string(name: 'BROWSER_VERSION', defaultValue: 'latest', description: 'Версия браузера')
-        // Исправлено: integer -> string
         string(name: 'THREADS_COUNT', defaultValue: '1', description: 'Количество потоков')
         string(name: 'HEADLESS_FLAG', defaultValue: '--headless', description: 'Флаг headless')
     }
@@ -40,10 +39,7 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 script {
-                    // Создаем папки
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-
-                    // ВАЖНО: Даем полные права на папки allure-results
                     sh "chmod -R 777 ${ALLURE_DIR}"
 
                     def networkExists = sh(script: "docker network ls --format '{{.Name}}' | grep -q '^${NETWORK_NAME}\$'", returnStatus: true) == 0
@@ -57,7 +53,6 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // Принудительно ставим права перед запуском (страховка)
                     sh "chmod -R 777 ${ALLURE_DIR}"
 
                     sh '''
@@ -71,6 +66,8 @@ pipeline {
                         fi
                     '''
 
+                    def threads = params.THREADS_COUNT.toInteger()
+
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
@@ -82,9 +79,9 @@ pipeline {
                         "${params.HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
 
-                    // Вариант 1: Запуск от root (чтобы избежать проблем с правами testuser)
                     sh """
                         docker run --rm \\
+                          --user root \\
                           --network ${NETWORK_NAME} \\
                           -v ${REPORTS_DIR}:/app/reports \\
                           -v ${ALLURE_DIR}:/app/allure-results \\
