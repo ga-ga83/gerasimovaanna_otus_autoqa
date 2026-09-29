@@ -1,5 +1,5 @@
 pipeline {
-    agent none
+    agent any  // <-- запускаем на любой доступной ноде
 
     environment {
         IMAGE_NAME = 'my-python-test-image'
@@ -9,14 +9,12 @@ pipeline {
 
     stages {
         stage('Checkout') {
-            agent { label 'docker-slave' }
             steps {
                 checkout scm
             }
         }
 
         stage('Build Docker Image') {
-            agent { label 'docker-slave' }
             steps {
                 script {
                     sh "docker build -t ${FULL_IMAGE} ."
@@ -25,9 +23,11 @@ pipeline {
         }
 
         stage('Run Tests') {
-            agent { label 'docker-slave' }
             steps {
                 script {
+                    // Создаём папки для артефактов, чтобы не было предупреждений
+                    sh 'mkdir -p reports screenshots'
+
                     sh """
                         docker run --rm \\
                           --user testuser \\
