@@ -116,7 +116,7 @@ pipeline {
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
                     results: [[path: 'allure-results']],
-                    commandline: 'Allure 3.16.0'
+                    commandline: 'Allure 2.46.0'
                 ])
             }
         }
