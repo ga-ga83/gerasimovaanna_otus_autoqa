@@ -1,11 +1,25 @@
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'SELENOID_URL', defaultValue: 'http://selenoid:4444/wd/hub', description: 'Адрес Executor')
+        string(name: 'APP_URL', defaultValue: 'http://prestashop:80/', description: 'Адрес приложения')
+        string(name: 'BROWSER_NAME', defaultValue: 'chrome', description: 'Браузер')
+        string(name: 'BROWSER_VERSION', defaultValue: 'latest', description: 'Версия браузера')
+        integer(name: 'THREADS_COUNT', defaultValue: 1, description: 'Количество потоков')
+        string(name: 'HEADLESS_FLAG', defaultValue: '--headless', description: 'Флаг headless')
+    }
+
     environment {
         IMAGE_NAME = 'my-python-test-image'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         FULL_IMAGE = "${IMAGE_NAME}:${IMAGE_TAG}"
         NETWORK_NAME = 'prestashop_network'
+
+        // Пути для маппинга
+        REPORTS_DIR = "${WORKSPACE}/reports"
+        ALLURE_DIR = "${WORKSPACE}/allure-results"
+        SCREENSHOTS_DIR = "${WORKSPACE}/screenshots"
     }
 
     stages {
@@ -23,55 +37,60 @@ pipeline {
             }
         }
 
-        stage('Run Tests') {
+        stage('Prepare Environment') {
             steps {
                 script {
-                    sh 'mkdir -p reports screenshots'
+                    // Создаем папки
+                    sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
+
+                    // ВАЖНО: Даем полные права на папки allure-results, чтобы testuser мог писать туда
+                    // Без этого может быть ошибка Permission Denied
+                    sh "chmod -R 777 ${ALLURE_DIR}"
 
                     def networkExists = sh(script: "docker network ls --format '{{.Name}}' | grep -q '^${NETWORK_NAME}\$'", returnStatus: true) == 0
                     if (!networkExists) {
-                        error "Сеть ${NETWORK_NAME} не найдена! Сначала запусти PrestaShop через docker compose."
+                        error "Сеть ${NETWORK_NAME} не найдена! Запустите docker-compose up."
                     }
+                }
+            }
+        }
 
-                    // ── Отключаем debug mode и скрываем Symfony toolbar ──
+        stage('Run Tests') {
+            steps {
+                script {
+                    // Отключение debug mode PrestaShop (как в вашем коде)
                     sh '''
-                        echo "=== Отключение debug mode PrestaShop ==="
-
-                        # 1. Показываем текущее состояние
-                        echo "--- Текущий _PS_MODE_DEV_ ---"
-                        docker exec prestashop grep -n "_PS_MODE_DEV_" /var/www/html/config/defines.inc.php 2>/dev/null || echo "Не найдено в defines.inc.php"
-
-                        # 2. Пробуем отключить (разные варианты кавычек и пробелов)
-                        docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
-                        docker exec prestashop sed -i 's/define("_PS_MODE_DEV_", true)/define("_PS_MODE_DEV_", false)/' /var/www/html/config/defines.inc.php 2>/dev/null || true
-                        docker exec prestashop sed -ri "s/define\$\\s*'_PS_MODE_DEV_'\\s*,\\s*true\\s*\$/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
-                        docker exec prestashop sed -ri "s/define\$\\s*\"_PS_MODE_DEV_\"\\s*,\\s*true\\s*\$/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
-
-                        # 3. Проверяем результат
-                        echo "--- После замены ---"
-                        docker exec prestashop grep -n "_PS_MODE_DEV_" /var/www/html/config/defines.inc.php 2>/dev/null || echo "Не найдено"
-
-                        # 4. Резервный план: скрываем Symfony toolbar через CSS
-                        # Добавляем display:none в существующие CSS-файлы админ-темы
-                        docker exec prestashop sh -c 'for f in $(find /var/www/html -maxdepth 6 -name "*.css" -path "*/themes/new-theme/*"); do echo ".sf-toolbarreset, .sf-toolbar { display: none !important; }" >> "$f"; done' 2>/dev/null || true
-                        echo "CSS override добавлен в файлы админ-темы"
-
-                        # 5. Очищаем весь кэш
-                        docker exec prestashop rm -rf /var/www/html/var/cache/* 2>/dev/null || true
-                        docker exec prestashop rm -rf /var/www/html/cache/smarty/* 2>/dev/null || true
-                        echo "Кэш очищен"
-
-                        echo "=== Готово ==="
+                        echo "=== Настройка PrestaShop ==="
+                        if docker ps -q -f name=prestashop | grep -q .; then
+                            docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
+                            docker exec prestashop rm -rf /var/www/html/var/cache/* 2>/dev/null || true
+                            echo "PrestaShop configured."
+                        else
+                            echo "Warning: PrestaShop container not found."
+                        fi
                     '''
 
-                    // ── Запуск тестов ──
+                    // Сборка команды pytest
+                    def pytestArgs = [
+                        "HW_8/test_prestashop_all.py",
+                        "--base-url=${params.APP_URL}",
+                        "--browser=${params.BROWSER_NAME}",
+                        "--browser-version=${params.BROWSER_VERSION}",
+                        "--selenoid-url=${params.SELENOID_URL}",
+                        "-v",
+                        "--alluredir=/app/allure-results", // Путь ВНУТРИ контейнера
+                        "${params.HEADLESS_FLAG}".trim()
+                    ].findAll { it.trim() != '' }.join(' ')
+
                     sh """
                         docker run --rm \\
                           --user testuser \\
                           --network ${NETWORK_NAME} \\
-                          -v \$(pwd)/reports:/home/testuser/reports \\
-                          -v \$(pwd)/screenshots:/home/testuser/screenshots \\
-                          ${FULL_IMAGE}
+                          -v ${REPORTS_DIR}:/app/reports \\
+                          -v ${ALLURE_DIR}:/app/allure-results \\
+                          -v ${SCREENSHOTS_DIR}:/app/screenshots \\
+                          ${FULL_IMAGE} \\
+                          python -m pytest ${pytestArgs}
                     """
                 }
             }
@@ -79,9 +98,10 @@ pipeline {
                 always {
                     archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
                     archiveArtifacts artifacts: 'screenshots/**/*', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'allure-results/**/*', allowEmptyArchive: true
                 }
                 failure {
-                    echo 'Тесты упали — проверь логи и скриншоты.'
+                    echo 'Тесты упали.'
                 }
             }
         }
@@ -91,6 +111,16 @@ pipeline {
         always {
             script {
                 sh "docker rmi ${FULL_IMAGE} || true"
+
+                // Генерация Allure Report
+                // Путь 'allure-results' здесь относится к WORKSPACE на мастере Jenkins
+                allure([
+                    includeProperties: false,
+                    jdk: '',
+                    properties: [],
+                    reportBuildPolicy: 'ALWAYS',
+                    results: [[path: 'allure-results']]
+                ])
             }
         }
     }
