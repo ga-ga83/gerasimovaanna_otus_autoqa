@@ -15,10 +15,8 @@ class AdminPage(BasePage):
     HEADER_PANEL = (By.CSS_SELECTOR, '#header')
     DEMO_BTH = (By.XPATH, "//*[@id='page-header-desc-configuration-switch_demo']")
 
-    # Меню Catalog (упрощенный селектор, без aria-expanded)
     MENU_BLOCK = (By.CSS_SELECTOR, "#subtab-AdminCatalog > a")
-    CATALOG_SUBTAB = (By.CSS_SELECTOR, "#subtab-AdminCatalog > a")
-    PRODUCTS_SUBTAB_LINK = (By.CSS_SELECTOR, "#subtab-AdminProducts a")  # Явный селектор для ссылки
+    PRODUCTS_SUBTAB_LINK = (By.CSS_SELECTOR, "#subtab-AdminProducts a")
 
     PRODUCTS_PAGE_ADMIN = (By.CSS_SELECTOR, "a[aria-current='page'][href*='catalog/products']")
     NEW_PRODUCT_BUTTON = (By.CSS_SELECTOR, "a.btn.btn-primary.new-product-button")
@@ -34,7 +32,7 @@ class AdminPage(BasePage):
     GOTO_CATALOG = (By.CSS_SELECTOR, "div.form-group.product-footer-left")
     PRODUCT_DELETE = (By.CSS_SELECTOR, "tbody tr:first-child td.column-name a")
 
-    # ВАЖНО: Убрали [aria-expanded], так как он динамический и ломает поиск
+    # Убрали aria-expanded — он динамический и ломает поиск
     SUBMIT_DROPDOWN_PRODUCT = (By.CSS_SELECTOR, "a[data-toggle='dropdown']")
     DELETE_BTH_MENU = (By.XPATH, "//a[contains(@class, 'grid-delete-row-link')]")
     DELETE_MESSAGE_DIALOG = (By.XPATH, "//div[@class='modal-content'][.//h4[text()='Delete selection']]")
@@ -52,7 +50,6 @@ class AdminPage(BasePage):
     def open_admin_page(self):
         with allure.step('Переход на страницу админки.'):
             self.driver.get(f"{self.base_url}administration")
-            # Ждем появления поля ввода email как маркера загрузки страницы логина
             WebDriverWait(self.driver, 20).until(
                 EC.presence_of_element_located(self.EMAIL_INPUT)
             )
@@ -76,61 +73,43 @@ class AdminPage(BasePage):
 
     def assert_administration_logged_in(self):
         with allure.step("Проверка авторизации (отображение панели)"):
-            # Даем время на редирект после логина
             time.sleep(2)
             text = self.wait_for_element(self.HEADER_PANEL)
             assert text.is_displayed(), "Авторизации на странице админ не было"
 
     def select_menu_block(self):
-        """
-        Клик по меню Catalog.
-        Используем element_to_be_clickable вместо visibility, так как в PrestaShop
-        элемент может быть в DOM, но перекрыт оверлеем или иметь opacity=0 до анимации.
-        """
+        """Клик по меню Catalog через JS с ожиданием кликабельности."""
         with allure.step("Клик по меню (Admin Catalog)"):
             self.driver.switch_to.default_content()
 
-            # 1. Ждем, пока элемент станет реально кликабельным (не перекрыт, не disabled)
             menu_el = WebDriverWait(self.driver, 30).until(
                 EC.element_to_be_clickable(self.MENU_BLOCK)
             )
 
             self.logger.info("Элемент меню найден и готов к клику.")
-
-            # 2. Клик через JS (самый надежный способ для сложных меню PrestaShop)
             self.driver.execute_script("arguments[0].click();", menu_el)
-
-            # 3. Даем время на раскрытие подменю (анимация)
             time.sleep(2.5)
 
     def subtab_catalog_click(self):
-        """
-        Логика перехода в Products.
-        Проверяет, не на странице ли мы уже. Пытается кликнуть меню. Если не вышло - прямой URL.
-        """
+        """Переход в Products: проверка URL, попытка клика, fallback на прямой URL."""
         with allure.step("Переход к Products (Catalog -> Products)"):
             self.driver.switch_to.default_content()
             current_url = self.driver.current_url
 
-            # Проверка: может, мы уже на странице Products?
             if "controller=AdminProducts" in current_url or "catalog/products" in current_url:
                 self.logger.info("Уже на странице Products, пропускаем навигацию.")
-                # Все равно ждем ключевой элемент, чтобы убедиться, что страница отрендерилась
                 self.wait_for_element(self.PRODUCTS_PAGE_ADMIN)
                 return
 
             try:
-                # Попытка 1: Если ссылка Products уже видна (меню раскрыто)
                 if EC.visibility_of_element_located(self.PRODUCTS_SUBTAB_LINK)(self.driver):
                     el = self.wait_for_element(self.PRODUCTS_SUBTAB_LINK)
                     self.driver.execute_script("arguments[0].click();", el)
                     self.logger.info("Кликнули по Products напрямую.")
                     return
 
-                # Попытка 2: Раскрыть меню Catalog и кликнуть
-                self.select_menu_block()  # Используем улучшенный метод выше
+                self.select_menu_block()
 
-                # Ждем появления ссылки Products после раскрытия меню
                 products_el = WebDriverWait(self.driver, 15).until(
                     EC.element_to_be_clickable(self.PRODUCTS_SUBTAB_LINK)
                 )
@@ -138,12 +117,8 @@ class AdminPage(BasePage):
                 self.logger.info("Меню раскрыто, кликнули по Products.")
 
             except Exception as e:
-                # Fallback: Прямой переход по URL, если клики не сработали
                 self.logger.warning(f"Не удалось кликнуть меню ({e}), переходим по URL напрямую.")
                 self.driver.get(f"{self.base_url}administration/index.php?controller=AdminProducts")
-
-                # КРИТИЧНО: После прямого перехода ОБЯЗАТЕЛЬНО ждем загрузки страницы
-                # Иначе тест упадет на следующем шаге, когда будет искать кнопку "Add new"
                 WebDriverWait(self.driver, 30).until(
                     EC.presence_of_element_located(self.NEW_PRODUCT_BUTTON)
                 )
@@ -185,17 +160,17 @@ class AdminPage(BasePage):
         with allure.step("Проверка отображения формы создания продукта"):
             self.driver.switch_to.default_content()
             self._wait_page_ready()
-            # Увеличили таймаут, форма может грузиться долго
             el = WebDriverWait(self.driver, 30).until(
                 EC.visibility_of_element_located(self.CHECK_CREATE_NEW_PRODUCT)
             )
             assert el.is_displayed(), "Форма создания продукта не открылась"
 
     def name_new_product(self, product_name):
-        with allure.step(f"Ввод имени продукта: {product_name}")
+        # ИСПРАВЛЕНО: теперь синтаксис верный
+        with allure.step(f"Ввод имени продукта: {product_name}"):
             input_el = self.wait_for_element(self.CHECK_CREATE_NEW_PRODUCT)
             input_el.click()
-            input_el.clear()  # Хорошая практика перед вводом
+            input_el.clear()
             input_el.send_keys(product_name)
 
     def save_new_product(self):
@@ -229,7 +204,6 @@ class AdminPage(BasePage):
     def go_to_catalog(self):
         with allure.step("Возврат к каталогу товаров"):
             self.driver.switch_to.default_content()
-            # Используем wait_for_clickable для кнопки возврата
             back_btn = self.wait_for_clickable(self.GOTO_CATALOG)
             back_btn.click()
             self._wait_page_ready()
@@ -240,24 +214,18 @@ class AdminPage(BasePage):
         assert el.is_displayed(), "Кнопка удаления не отображается"
 
     def select_submit_menu_product(self):
-        """
-        Открытие выпадающего меню (preview/delete) в строке товара.
-        Ключевое изменение: ждем element_to_be_clickable и используем JS клик.
-        """
         self.driver.switch_to.default_content()
 
-        # Увеличенный таймаут + ожидание кликабельности
         el = WebDriverWait(self.driver, 30).until(
             EC.element_to_be_clickable(self.SUBMIT_DROPDOWN_PRODUCT)
         )
 
-        self.logger.debug(f"Кнопка меню найдена. Текст: {el.text if hasattr(el, 'text') else 'OK'}")
+        self.logger.debug(f"Кнопка меню найдена.")
         self.driver.execute_script("arguments[0].click();", el)
-        time.sleep(2)  # Даем время раскрыться выпадающему списку
+        time.sleep(2)
 
     def menu_product_delete(self):
         self.driver.switch_to.default_content()
-        # Ждем появления кнопки Delete в раскрывшемся списке
         el = WebDriverWait(self.driver, 15).until(
             EC.visibility_of_element_located(self.DELETE_BTH_MENU)
         )
