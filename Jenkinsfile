@@ -5,7 +5,7 @@ pipeline {
         string(name: 'SELENOID_URL', defaultValue: 'http://selenoid:4444/wd/hub', description: 'Адрес Executor')
         string(name: 'APP_URL', defaultValue: 'http://prestashop:80/', description: 'Адрес приложения')
         string(name: 'BROWSER_NAME', defaultValue: 'chrome', description: 'Браузер')
-        string(name: 'BROWSER_VERSION', defaultValue: 'latest', description: 'Версия браузера')
+        string(name: 'BROWSER_VERSION', defaultValue: '128.0', description: 'Версия браузера')
         string(name: 'THREADS_COUNT', defaultValue: '1', description: 'Количество потоков')
         string(name: 'HEADLESS_FLAG', defaultValue: '--headless', description: 'Флаг headless')
     }
