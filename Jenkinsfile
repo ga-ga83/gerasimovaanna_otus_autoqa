@@ -28,22 +28,43 @@ pipeline {
                 script {
                     sh 'mkdir -p reports screenshots'
 
-                    // Проверяем, что сеть существует
                     def networkExists = sh(script: "docker network ls --format '{{.Name}}' | grep -q '^${NETWORK_NAME}\$'", returnStatus: true) == 0
                     if (!networkExists) {
-                        error "Сеть ${NETWORK_NAME} не найдена! Сначала запуши PrestaShop через docker compose."
+                        error "Сеть ${NETWORK_NAME} не найдена! Сначала запусти PrestaShop через docker compose."
                     }
 
-                    // Отключаем debug mode в PrestaShop, чтобы убрать Symfony Web Debug Toolbar
-                    // (он перекрывает кнопки админки → ElementClickInterceptedException)
-                    // и ускорить загрузку страниц (→ TimeoutException)
+                    // ── Отключаем debug mode и скрываем Symfony toolbar ──
                     sh '''
-                        docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php || true
-                        docker exec prestashop rm -rf /var/www/html/var/cache/* || true
-                        echo "PrestaShop debug mode disabled, cache cleared"
+                        echo "=== Отключение debug mode PrestaShop ==="
+
+                        # 1. Показываем текущее состояние
+                        echo "--- Текущий _PS_MODE_DEV_ ---"
+                        docker exec prestashop grep -n "_PS_MODE_DEV_" /var/www/html/config/defines.inc.php 2>/dev/null || echo "Не найдено в defines.inc.php"
+
+                        # 2. Пробуем отключить (разные варианты кавычек и пробелов)
+                        docker exec prestashop sed -i "s/define('_PS_MODE_DEV_', true)/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
+                        docker exec prestashop sed -i 's/define("_PS_MODE_DEV_", true)/define("_PS_MODE_DEV_", false)/' /var/www/html/config/defines.inc.php 2>/dev/null || true
+                        docker exec prestashop sed -ri "s/define\$\\s*'_PS_MODE_DEV_'\\s*,\\s*true\\s*\$/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
+                        docker exec prestashop sed -ri "s/define\$\\s*\"_PS_MODE_DEV_\"\\s*,\\s*true\\s*\$/define('_PS_MODE_DEV_', false)/" /var/www/html/config/defines.inc.php 2>/dev/null || true
+
+                        # 3. Проверяем результат
+                        echo "--- После замены ---"
+                        docker exec prestashop grep -n "_PS_MODE_DEV_" /var/www/html/config/defines.inc.php 2>/dev/null || echo "Не найдено"
+
+                        # 4. Резервный план: скрываем Symfony toolbar через CSS
+                        # Добавляем display:none в существующие CSS-файлы админ-темы
+                        docker exec prestashop sh -c 'for f in $(find /var/www/html -maxdepth 6 -name "*.css" -path "*/themes/new-theme/*"); do echo ".sf-toolbarreset, .sf-toolbar { display: none !important; }" >> "$f"; done' 2>/dev/null || true
+                        echo "CSS override добавлен в файлы админ-темы"
+
+                        # 5. Очищаем весь кэш
+                        docker exec prestashop rm -rf /var/www/html/var/cache/* 2>/dev/null || true
+                        docker exec prestashop rm -rf /var/www/html/cache/smarty/* 2>/dev/null || true
+                        echo "Кэш очищен"
+
+                        echo "=== Готово ==="
                     '''
 
-                    // Запускаем тесты
+                    // ── Запуск тестов ──
                     sh """
                         docker run --rm \\
                           --user testuser \\
@@ -74,4 +95,3 @@ pipeline {
         }
     }
 }
-
