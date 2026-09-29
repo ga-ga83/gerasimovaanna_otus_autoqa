@@ -8,7 +8,6 @@ import time
 
 
 class AdminPage(BasePage):
-    # --- Локаторы ---
     EMAIL_INPUT = (By.CSS_SELECTOR, "input[name='email']")
     PASSWORD_INPUT = (By.CSS_SELECTOR, "input[name='passwd']")
     SUBMIT_BTN_LOGIN = (By.XPATH, "//button[@name='submitLogin']")
@@ -31,15 +30,12 @@ class AdminPage(BasePage):
 
     GOTO_CATALOG = (By.CSS_SELECTOR, "div.form-group.product-footer-left")
     PRODUCT_DELETE = (By.CSS_SELECTOR, "tbody tr:first-child td.column-name a")
-
-    # Убрали aria-expanded — он динамический и ломает поиск
     SUBMIT_DROPDOWN_PRODUCT = (By.CSS_SELECTOR, "a[data-toggle='dropdown']")
     DELETE_BTH_MENU = (By.XPATH, "//a[contains(@class, 'grid-delete-row-link')]")
     DELETE_MESSAGE_DIALOG = (By.XPATH, "//div[@class='modal-content'][.//h4[text()='Delete selection']]")
     DELETE_BUTTON_MODAL = (By.CSS_SELECTOR, "button.btn-confirm-submit")
 
     def _wait_page_ready(self):
-        """Ожидание полной загрузки DOM."""
         try:
             WebDriverWait(self.driver, 30).until(
                 lambda d: d.execute_script("return document.readyState") == "complete"
@@ -75,23 +71,26 @@ class AdminPage(BasePage):
         with allure.step("Проверка авторизации (отображение панели)"):
             time.sleep(2)
             text = self.wait_for_element(self.HEADER_PANEL)
-            assert text.is_displayed(), "Авторизации на странице админ не было"
+            assert text.is_displayed(), "Авторизации на странице админ не была"
+
+    def select_element_page(self):
+        return self.wait_for_element(self.DEMO_BTH)
 
     def select_menu_block(self):
-        """Клик по меню Catalog через JS с ожиданием кликабельности."""
         with allure.step("Клик по меню (Admin Catalog)"):
             self.driver.switch_to.default_content()
+
+            # Логируем URL и заголовок для отладки
+            self.logger.info(f"select_menu_block: URL={self.driver.current_url}, Title={self.driver.title}")
 
             menu_el = WebDriverWait(self.driver, 30).until(
                 EC.element_to_be_clickable(self.MENU_BLOCK)
             )
-
             self.logger.info("Элемент меню найден и готов к клику.")
             self.driver.execute_script("arguments[0].click();", menu_el)
             time.sleep(2.5)
 
     def subtab_catalog_click(self):
-        """Переход в Products: проверка URL, попытка клика, fallback на прямой URL."""
         with allure.step("Переход к Products (Catalog -> Products)"):
             self.driver.switch_to.default_content()
             current_url = self.driver.current_url
@@ -118,7 +117,16 @@ class AdminPage(BasePage):
 
             except Exception as e:
                 self.logger.warning(f"Не удалось кликнуть меню ({e}), переходим по URL напрямую.")
+
+                # Логируем состояние ДО перехода
+                self.logger.warning(f"До fallback: URL={self.driver.current_url}, Title={self.driver.title}")
+
                 self.driver.get(f"{self.base_url}administration/index.php?controller=AdminProducts")
+
+                # Логируем состояние ПОСЛЕ перехода
+                self.logger.warning(f"После fallback: URL={self.driver.current_url}, Title={self.driver.title}")
+
+                # Ждем любой маркер страницы продуктов
                 WebDriverWait(self.driver, 30).until(
                     EC.presence_of_element_located(self.NEW_PRODUCT_BUTTON)
                 )
@@ -166,7 +174,6 @@ class AdminPage(BasePage):
             assert el.is_displayed(), "Форма создания продукта не открылась"
 
     def name_new_product(self, product_name):
-        # ИСПРАВЛЕНО: теперь синтаксис верный
         with allure.step(f"Ввод имени продукта: {product_name}"):
             input_el = self.wait_for_element(self.CHECK_CREATE_NEW_PRODUCT)
             input_el.click()
@@ -216,13 +223,30 @@ class AdminPage(BasePage):
     def select_submit_menu_product(self):
         self.driver.switch_to.default_content()
 
-        el = WebDriverWait(self.driver, 30).until(
-            EC.element_to_be_clickable(self.SUBMIT_DROPDOWN_PRODUCT)
-        )
+        self.logger.info(f"select_submit_menu_product: URL={self.driver.current_url}, Title={self.driver.title}")
 
-        self.logger.debug(f"Кнопка меню найдена.")
-        self.driver.execute_script("arguments[0].click();", el)
-        time.sleep(2)
+        # Пробуем основной селектор
+        try:
+            el = WebDriverWait(self.driver, 15).until(
+                EC.element_to_be_clickable(self.SUBMIT_DROPDOWN_PRODUCT)
+            )
+            self.driver.execute_script("arguments[0].click();", el)
+            time.sleep(2)
+            return
+        except Exception:
+            self.logger.warning("Основной селектор dropdown не сработал, пробуем альтернативный.")
+
+        # Fallback: ищем через JS любой элемент с dropdown-toggle в таблице
+        try:
+            self.driver.execute_script("""
+                var el = document.querySelector("table tr a.dropdown-toggle, table tr [data-toggle='dropdown']");
+                if (el) { el.click(); }
+            """)
+            time.sleep(2)
+            self.logger.info("Альтернативный клик по dropdown выполнен.")
+        except Exception as e:
+            self.logger.error(f"Не удалось найти dropdown: {e}")
+            raise
 
     def menu_product_delete(self):
         self.driver.switch_to.default_content()
