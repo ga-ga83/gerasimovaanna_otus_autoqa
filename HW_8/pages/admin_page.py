@@ -91,35 +91,44 @@ class AdminPage(BasePage):
     def subtab_catalog_click(self):
         with allure.step("Клик по меню Catalog -> Products"):
             self.driver.switch_to.default_content()
-
             products_link_selector = (By.CSS_SELECTOR, "#subtab-AdminProducts a")
 
-            # 1. Если Products уже виден — кликаем сразу
+            # 1. Проверка: может, мы уже на странице Products?
+            current_url = self.driver.current_url
+            if "controller=AdminProducts" in current_url or "catalog/products" in current_url:
+                self.logger.info("Уже на странице Products, пропускаем клик.")
+                return
+
+            # 2. Пытаемся кликнуть, если Products виден сразу
             try:
                 if EC.visibility_of_element_located(products_link_selector)(self.driver):
                     products_el = self.wait_for_element(products_link_selector)
                     self.driver.execute_script("arguments[0].click();", products_el)
-                    self.logger.info("Меню Каталог уже открыто, кликнули по Products.")
+                    self.logger.info("Кликнули по Products напрямую.")
                     return
             except Exception:
-                pass  # Products не виден, нужно раскрыть меню
+                pass
 
-            # 2. Пытаемся раскрыть меню Каталог
+            # 3. Раскрываем меню и кликаем
             try:
-                menu_el = WebDriverWait(self.driver, 15).until(
-                    EC.visibility_of_element_located(self.MENU_BLOCK)
+                menu_el = WebDriverWait(self.driver, 20).until(
+                    EC.presence_of_element_located(self.MENU_BLOCK)
                 )
-                self.driver.execute_script("arguments[0].click();", menu_el)
-                time.sleep(1.5)
+                if not menu_el.is_displayed():
+                    WebDriverWait(self.driver, 5).until(EC.visibility_of(menu_el))
 
-                products_el = WebDriverWait(self.driver, 10).until(
-                    EC.visibility_of_element_located(products_link_selector)
+                self.driver.execute_script("arguments[0].click();", menu_el)
+                time.sleep(2)  # Важно: меню раскрывается с анимацией
+
+                products_el = WebDriverWait(self.driver, 15).until(
+                    EC.element_to_be_clickable(products_link_selector)
                 )
                 self.driver.execute_script("arguments[0].click();", products_el)
                 self.logger.info("Меню раскрыто, кликнули по Products.")
-            except Exception:
-                # 3. Fallback: прямая навигация по URL, если меню не поддалось
-                self.logger.warning("Не удалось кликнуть меню, перехожу по URL напрямую.")
+
+            except Exception as e:
+                # 4. Fallback: прямой URL
+                self.logger.warning(f"Не удалось кликнуть меню ({e}), переходим по URL напрямую.")
                 self.driver.get(f"{self.base_url}administration/index.php?controller=AdminProducts")
 
     def subtab_products_click(self):
