@@ -39,7 +39,6 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 script {
-                    // Очищаем папку результатов перед запуском
                     sh "rm -rf ${ALLURE_DIR}/*"
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                     sh "chmod -R 777 ${ALLURE_DIR}"
@@ -57,6 +56,7 @@ pipeline {
                 script {
                     sh "chmod -R 777 ${ALLURE_DIR}"
 
+                    // Проверка PrestaShop
                     sh '''
                         echo "=== Настройка PrestaShop ==="
                         if docker ps -q -f name=prestashop | grep -q .; then
@@ -79,6 +79,21 @@ pipeline {
                         "${params.HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
 
+                    echo "=== ЗАПУСК pytest внутри контейнера ==="
+
+                    // Сначала проверим, видит ли pytest тесты и какой список плагинов
+                    sh """
+                        docker run --rm \\
+                          --user root \\
+                          --network ${NETWORK_NAME} \\
+                          -v ${REPORTS_DIR}:/app/reports \\
+                          -v ${ALLURE_DIR}:/app/allure-results \\
+                          -v ${SCREENSHOTS_DIR}:/app/screenshots \\
+                          ${FULL_IMAGE} \\
+                          python -m pytest --collect-only ${pytestArgs}
+                    """
+
+                    echo "=== ПОЛНЫЙ ЗАПУСК тестов ==="
                     sh """
                         docker run --rm \\
                           --user root \\
@@ -90,7 +105,7 @@ pipeline {
                           python -m pytest ${pytestArgs}
                     """
 
-                    // ОТЛАДКА: Проверяем, что файлы результатов реально созданы
+                    // Диагностика файлов
                     echo "--- Содержимое папки allure-results ---"
                     sh "ls -la ${ALLURE_DIR}/"
 
@@ -99,7 +114,14 @@ pipeline {
                     echo "Найдено JSON-файлов результатов: ${count}"
 
                     if (count.toInteger() == 0) {
-                        error "ОШИБКА: В папке allure-results нет файлов *-result.json. Тесты не записали результаты."
+                        error """
+                        ОШИБКА: В папке allure-results нет файлов *-result.json.
+                        Возможные причины:
+                        1. В образе нет плагина allure-pytest.
+                        2. Тесты не найдены (неверный путь HW_8/test_prestashop_all.py).
+                        3. Тесты упали до начала записи результатов.
+                        Смотри логи выше, чтобы понять, что именно происходит.
+                        """
                     }
                 }
             }
@@ -121,14 +143,13 @@ pipeline {
             script {
                 sh "docker rmi ${FULL_IMAGE} || true"
 
-                // ВАЖНО: Имя должно ТОЧНО совпадать с тем, что есть в Manage Jenkins -> Tools
                 allure([
                     includeProperties: false,
                     jdk: '',
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
                     results: [[path: 'allure-results']],
-                    commandline: 'Allure 2.29.0'  // <-- Используем именно эту версию
+                    commandline: 'Allure 2.29.0'
                 ])
             }
         }
