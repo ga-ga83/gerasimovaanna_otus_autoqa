@@ -56,7 +56,6 @@ pipeline {
                 script {
                     sh "chmod -R 777 ${ALLURE_DIR}"
 
-                    // Проверка PrestaShop
                     sh '''
                         echo "=== Настройка PrestaShop ==="
                         if docker ps -q -f name=prestashop | grep -q .; then
@@ -68,6 +67,26 @@ pipeline {
                         fi
                     '''
 
+                    // ДИАГНОСТИКА: Проверяем pytest.ini и запускаем простой тест с allure
+                    echo "=== ДИАГНОСТИКА: Проверка pytest.ini ==="
+                    sh """
+                        docker run --rm --user root \\
+                          --network ${NETWORK_NAME} \\
+                          -v ${ALLURE_DIR}:/app/allure-results \\
+                          ${FULL_IMAGE} \\
+                          bash -c '
+                            echo "--- pytest.ini ---";
+                            cat /app/pytest.ini 2>/dev/null || echo "pytest.ini не найден";
+                            echo "";
+                            echo "--- Простой тест allure ---";
+                            mkdir -p /app/allure-results;
+                            echo "def test_dummy(): assert True" > /tmp/test_dummy.py;
+                            python -m pytest /tmp/test_dummy.py -v --alluredir=/app/allure-results --clean-alluredir;
+                            echo "--- Файлы после простого теста ---";
+                            ls -la /app/allure-results/;
+                          '
+                    """
+
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
@@ -76,22 +95,9 @@ pipeline {
                         "--selenoid-url=${params.SELENOID_URL}",
                         "-v",
                         "--alluredir=/app/allure-results",
+                        "--clean-alluredir",
                         "${params.HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
-
-                    echo "=== ЗАПУСК pytest внутри контейнера ==="
-
-                    // Сначала проверим, видит ли pytest тесты и какой список плагинов
-                    sh """
-                        docker run --rm \\
-                          --user root \\
-                          --network ${NETWORK_NAME} \\
-                          -v ${REPORTS_DIR}:/app/reports \\
-                          -v ${ALLURE_DIR}:/app/allure-results \\
-                          -v ${SCREENSHOTS_DIR}:/app/screenshots \\
-                          ${FULL_IMAGE} \\
-                          python -m pytest --collect-only ${pytestArgs}
-                    """
 
                     echo "=== ПОЛНЫЙ ЗАПУСК тестов ==="
                     sh """
@@ -105,7 +111,6 @@ pipeline {
                           python -m pytest ${pytestArgs}
                     """
 
-                    // Диагностика файлов
                     echo "--- Содержимое папки allure-results ---"
                     sh "ls -la ${ALLURE_DIR}/"
 
@@ -114,14 +119,7 @@ pipeline {
                     echo "Найдено JSON-файлов результатов: ${count}"
 
                     if (count.toInteger() == 0) {
-                        error """
-                        ОШИБКА: В папке allure-results нет файлов *-result.json.
-                        Возможные причины:
-                        1. В образе нет плагина allure-pytest.
-                        2. Тесты не найдены (неверный путь HW_8/test_prestashop_all.py).
-                        3. Тесты упали до начала записи результатов.
-                        Смотри логи выше, чтобы понять, что именно происходит.
-                        """
+                        error "ОШИБКА: allure-results пуст. Смотри логи диагностики выше."
                     }
                 }
             }
