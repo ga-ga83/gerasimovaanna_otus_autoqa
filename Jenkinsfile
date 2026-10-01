@@ -44,7 +44,7 @@ pipeline {
                         "--browser-version=${params.BROWSER_VERSION}",
                         "--selenoid-url=${params.SELENOID_URL}",
                         "-v",
-                        "--alluredir=/app/allure-results",
+                        "--alluredir=${ALLURE_DIR}",
                         "--clean-alluredir",
                         "${params.HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
@@ -83,10 +83,11 @@ pipeline {
                     jdk: '',
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
-                    results: [[path: 'allure-results']],
+                    results: [[path: ALLURE_DIR]],
                     commandline: 'Allure 2.29.0'
                 ])
             }
         }
     }
 }
+
