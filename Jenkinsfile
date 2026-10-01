@@ -2,20 +2,18 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'SELENOID_URL', defaultValue: 'http://selenoid:4444/wd/hub', description: 'Адрес Executor')
-        string(name: 'APP_URL', defaultValue: 'http://prestashop:80/', description: 'Адрес приложения')
-        string(name: 'BROWSER_NAME', defaultValue: 'chrome', description: 'Браузер')
-        string(name: 'BROWSER_VERSION', defaultValue: '128.0', description: 'Версия браузера')
-        string(name: 'THREADS_COUNT', defaultValue: '1', description: 'Количество потоков')
-        string(name: 'HEADLESS_FLAG', defaultValue: '--headless', description: 'Флаг headless')
+        string(name: 'IMAGE_FULL', defaultValue: 'my-python-test-image:latest', description: 'Готовый Docker-образ с тестами')
+        // остальные параметры...
+        string(name: 'SELENOID_URL', defaultValue: 'http://selenoid:4444/wd/hub')
+        string(name: 'APP_URL', defaultValue: 'http://prestashop:80/')
+        string(name: 'BROWSER_NAME', defaultValue: 'chrome')
+        string(name: 'BROWSER_VERSION', defaultValue: '128.0')
+        string(name: 'THREADS_COUNT', defaultValue: '1')
+        string(name: 'HEADLESS_FLAG', defaultValue: '--headless')
     }
 
     environment {
-        IMAGE_NAME = 'my-python-test-image'
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
-        FULL_IMAGE = "${IMAGE_NAME}:${IMAGE_TAG}"
         NETWORK_NAME = 'prestashop_network'
-
         REPORTS_DIR = "${WORKSPACE}/reports"
         ALLURE_DIR = "${WORKSPACE}/allure-results"
         SCREENSHOTS_DIR = "${WORKSPACE}/screenshots"
@@ -28,19 +26,12 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    sh "docker build -t ${FULL_IMAGE} ."
-                }
-            }
-        }
+        // Build Docker Image — УДАЛЕНО
 
         stage('Prepare Environment') {
             steps {
                 script {
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-
                     sh "chmod -R 777 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
 
                     def networkExists = sh(script: "docker network ls --format '{{.Name}}' | grep -q '^${NETWORK_NAME}\$'", returnStatus: true) == 0
@@ -54,7 +45,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-
+                    // Проверка PrestaShop (как у тебя)
                     sh '''
                         echo "=== Настройка PrestaShop ==="
                         if docker ps -q -f name=prestashop | grep -q .; then
@@ -65,26 +56,6 @@ pipeline {
                             echo "Warning: PrestaShop container not found."
                         fi
                     '''
-
-                    // ДИАГНОСТИКА: Проверяем pytest.ini и запускаем простой тест с allure
-                    echo "=== ДИАГНОСТИКА: Проверка pytest.ini ==="
-                    sh """
-                        docker run --rm --user root \\
-                          --network ${NETWORK_NAME} \\
-                          -v ${ALLURE_DIR}:/app/allure-results \\
-                          ${FULL_IMAGE} \\
-                          bash -c '
-                            echo "--- pytest.ini ---";
-                            cat /app/pytest.ini 2>/dev/null || echo "pytest.ini не найден";
-                            echo "";
-                            echo "--- Простой тест allure ---";
-                            mkdir -p /app/allure-results;
-                            echo "def test_dummy(): assert True" > /tmp/test_dummy.py;
-                            python -m pytest /tmp/test_dummy.py -v --alluredir=/app/allure-results --clean-alluredir;
-                            echo "--- Файлы после простого теста ---";
-                            ls -la /app/allure-results/;
-                          '
-                    """
 
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
@@ -98,7 +69,7 @@ pipeline {
                         "${params.HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
 
-                    echo "=== ПОЛНЫЙ ЗАПУСК тестов ==="
+                    echo "=== Запуск тестов из образа: ${params.IMAGE_FULL} ==="
                     sh """
                         docker run --rm \\
                           --user root \\
@@ -106,14 +77,13 @@ pipeline {
                           -v ${REPORTS_DIR}:/app/reports \\
                           -v ${ALLURE_DIR}:/app/allure-results \\
                           -v ${SCREENSHOTS_DIR}:/app/screenshots \\
-                          ${FULL_IMAGE} \\
+                          ${params.IMAGE_FULL} \\
                           python -m pytest ${pytestArgs}
                     """
 
                     echo "--- Содержимое папки allure-results ---"
                     sh "ls -la ${ALLURE_DIR}/"
 
-                    echo "--- Количество файлов результатов (*-result.json) ---"
                     def count = sh(script: "find ${ALLURE_DIR} -name '*-result.json' | wc -l", returnStdout: true).trim()
                     echo "Найдено JSON-файлов результатов: ${count}"
 
@@ -138,7 +108,8 @@ pipeline {
     post {
         always {
             script {
-                sh "docker rmi ${FULL_IMAGE} || true"
+                // Не пытаемся удалить образ, если он внешний
+                echo "Образ ${params.IMAGE_FULL} не удаляется (внешний)."
 
                 allure([
                     includeProperties: false,
