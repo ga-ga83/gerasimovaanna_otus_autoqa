@@ -30,7 +30,7 @@ pipeline {
                     sh """
                         sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common
                         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
-                        sudo add-apt-repository \"deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable\"
+                        sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable"
                         sudo apt-get update && sudo apt-get install -y docker-ce
                     """
                 }
@@ -69,13 +69,13 @@ pipeline {
 
                     echo "=== Запуск тестов из образа: ${IMAGE_FULL} ==="
                     sh """
-                        docker run --rm \\
-                          --user root \\
-                          --network ${NETWORK_NAME} \\
-                          -v ${REPORTS_DIR}:/app/reports \\
-                          -v ${ALLURE_DIR}:/app/allure-results \\
-                          -v ${SCREENSHOTS_DIR}:/app/screenshots \\
-                          ${IMAGE_FULL} \\
+                        docker run --rm \
+                          --user root \
+                          --network ${NETWORK_NAME} \
+                          -v ${REPORTS_DIR}:/app/reports \
+                          -v ${ALLURE_DIR}:/app/allure-results \
+                          -v ${SCREENSHOTS_DIR}:/app/screenshots \
+                          ${IMAGE_FULL} \
                           python -m pytest ${pytestArgs}
                     """
                 }
