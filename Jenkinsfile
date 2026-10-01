@@ -8,7 +8,9 @@ pipeline {
 
     parameters {
         string(name: 'IMAGE_FULL', defaultValue: 'gerasimovaanna_otus_autoqa-tests:latest', description: 'Docker-образ с тестами')
+        // Имя контейнера в сети docker — selenoid, порт внутри сети 4444
         string(name: 'SELENOID_URL', defaultValue: 'http://selenoid:4444/wd/hub', description: 'Адрес Selenoid')
+        // Внутри Docker-сети prestashop доступен на порту 80
         string(name: 'APP_URL', defaultValue: 'http://prestashop:80/', description: 'URL приложения')
         string(name: 'BROWSER_NAME', defaultValue: 'chrome', description: 'Браузер')
         string(name: 'BROWSER_VERSION', defaultValue: '128.0', description: 'Версия браузера')
@@ -31,9 +33,10 @@ pipeline {
 
         stage('Verify Docker') {
             steps {
-                // Вызываем исполняемый файл. За счет блока tools
-                // Jenkins сам добавит скачанный клиент в PATH этой сессии
-                sh 'docker --version'
+                // withEnv гарантирует, что скачанный плагином Docker CLI будет виден в PATH
+                withEnv(["PATH+DOCKER=${tool 'default'}/bin"]) {
+                    sh 'docker --version'
+                }
             }
         }
 
@@ -48,7 +51,9 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${IMAGE_FULL} ."
+                withEnv(["PATH+DOCKER=${tool 'default'}/bin"]) {
+                    sh "docker build -t ${IMAGE_FULL} ."
+                }
             }
         }
 
@@ -68,16 +73,18 @@ pipeline {
                     ].findAll { it.trim() != '' }.join(' ')
 
                     echo "=== Запуск тестов из образа: ${IMAGE_FULL} ==="
-                    sh """
-                        docker run --rm \
-                          --user root \
-                          --network ${NETWORK_NAME} \
-                          -v ${REPORTS_DIR}:/app/reports \
-                          -v ${ALLURE_DIR}:/app/allure-results \
-                          -v ${SCREENSHOTS_DIR}:/app/screenshots \
-                          ${IMAGE_FULL} \
-                          python -m pytest ${pytestArgs}
-                    """
+                    withEnv(["PATH+DOCKER=${tool 'default'}/bin"]) {
+                        sh """
+                            docker run --rm \
+                              --user root \
+                              --network ${NETWORK_NAME} \
+                              -v ${REPORTS_DIR}:/app/reports \
+                              -v ${ALLURE_DIR}:/app/allure-results \
+                              -v ${SCREENSHOTS_DIR}:/app/screenshots \
+                              ${IMAGE_FULL} \
+                              python -m pytest ${pytestArgs}
+                        """
+                    }
                 }
             }
             post {
