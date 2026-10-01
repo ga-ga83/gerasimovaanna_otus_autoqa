@@ -27,7 +27,8 @@ pipeline {
         stage('Verify Docker') {
             steps {
                 sh 'docker --version'
-                sh 'docker info --format "{{.ServerVersion}}"'
+                // Экранируем фигурные скобки, чтобы Jenkins не путал их со своим синтаксисом
+                sh 'docker info --format "\\{\\{.ServerVersion\\}\\}"'
             }
         }
 
