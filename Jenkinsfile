@@ -88,9 +88,6 @@ pipeline {
                     echo 'Тесты упали.'
                 }
             }
-        }
-    }
-
     post {
         always {
             script {
@@ -106,5 +103,3 @@ pipeline {
         }
     }
 }
-
-
