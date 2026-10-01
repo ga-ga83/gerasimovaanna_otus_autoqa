@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    // Указываем Jenkins автоматически подтянуть Docker CLI перед сборкой
+    tools {
+        dockerTool 'По умолчанию'
+    }
+
     parameters {
         string(name: 'IMAGE_FULL', defaultValue: 'gerasimovaanna_otus_autoqa-tests:latest', description: 'Docker-образ с тестами')
         string(name: 'SELENOID_URL', defaultValue: 'http://selenoid:4444/wd/hub', description: 'Адрес Selenoid')
@@ -26,9 +31,8 @@ pipeline {
 
         stage('Verify Docker') {
             steps {
+                // Теперь команда docker гарантированно сработает
                 sh 'docker --version'
-                // Экранируем фигурные скобки, чтобы Jenkins не путал их со своим синтаксисом
-                sh 'docker info --format "\\{\\{.ServerVersion\\}\\}"'
             }
         }
 
