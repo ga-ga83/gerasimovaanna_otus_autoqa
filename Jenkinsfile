@@ -1,9 +1,8 @@
 pipeline {
     agent any
 
-    // Указываем Jenkins автоматически подтянуть Docker CLI перед сборкой
+    // Используем встроенный автоматический установщик Jenkins
     tools {
-        // Используем строго тот тип, который ожидает ваш Jenkins
         dockerTool 'default'
     }
 
@@ -32,7 +31,8 @@ pipeline {
 
         stage('Verify Docker') {
             steps {
-                // Теперь команда docker гарантированно сработает
+                // Вызываем исполняемый файл. За счет блока tools
+                // Jenkins сам добавит скачанный клиент в PATH этой сессии
                 sh 'docker --version'
             }
         }
