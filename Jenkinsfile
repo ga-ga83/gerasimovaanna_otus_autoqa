@@ -3,7 +3,8 @@ pipeline {
 
     // Указываем Jenkins автоматически подтянуть Docker CLI перед сборкой
     tools {
-        dockerTool 'По умолчанию'
+        // Использовать строго "docker", а не "dockerTool"
+        docker 'По умолчанию'
     }
 
     parameters {
