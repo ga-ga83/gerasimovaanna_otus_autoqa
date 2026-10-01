@@ -24,13 +24,29 @@ pipeline {
             }
         }
 
+        stage('Install Docker') {
+            steps {
+                script {
+                    sh 'sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates curl software-properties-common'
+                    sh 'curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -'
+                    sh 'sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"'
+                    sh 'sudo apt-get update && sudo apt-get install -y docker-ce'
+                }
+            }
+        }
+
         stage('Prepare Environment') {
             steps {
                 script {
-                    // Создаём директории для артефактов
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                     sh "chmod -R 755 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                 }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE_FULL} ."
             }
         }
 
@@ -39,17 +55,17 @@ pipeline {
                 script {
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
-                        "--base-url=${params.APP_URL}",
-                        "--browser=${params.BROWSER_NAME}",
-                        "--browser-version=${params.BROWSER_VERSION}",
-                        "--selenoid-url=${params.SELENOID_URL}",
+                        "--base-url=${APP_URL}",
+                        "--browser=${BROWSER_NAME}",
+                        "--browser-version=${BROWSER_VERSION}",
+                        "--selenoid-url=${SELENOID_URL}",
                         "-v",
                         "--alluredir=${ALLURE_DIR}",
                         "--clean-alluredir",
-                        "${params.HEADLESS_FLAG}".trim()
+                        "${HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
 
-                    echo "=== Запуск тестов из образа: ${params.IMAGE_FULL} ==="
+                    echo "=== Запуск тестов из образа: ${IMAGE_FULL} ==="
                     sh """
                         docker run --rm \\
                           --user root \\
@@ -57,7 +73,7 @@ pipeline {
                           -v ${REPORTS_DIR}:/app/reports \\
                           -v ${ALLURE_DIR}:/app/allure-results \\
                           -v ${SCREENSHOTS_DIR}:/app/screenshots \\
-                          ${params.IMAGE_FULL} \\
+                          ${IMAGE_FULL} \\
                           python -m pytest ${pytestArgs}
                     """
                 }
