@@ -39,9 +39,9 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 script {
-                    sh "rm -rf ${ALLURE_DIR}/*"
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-                    sh "chmod -R 777 ${ALLURE_DIR}"
+
+                    sh "chmod -R 777 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
 
                     def networkExists = sh(script: "docker network ls --format '{{.Name}}' | grep -q '^${NETWORK_NAME}\$'", returnStatus: true) == 0
                     if (!networkExists) {
@@ -54,7 +54,6 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    sh "chmod -R 777 ${ALLURE_DIR}"
 
                     sh '''
                         echo "=== Настройка PrestaShop ==="
