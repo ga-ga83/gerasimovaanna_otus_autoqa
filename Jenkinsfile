@@ -55,7 +55,7 @@ pipeline {
                         "--browser-version=${BROWSER_VERSION}",
                         "--selenoid-url=${SELENOID_URL}",
                         "-v",
-                        "--alluredir=${ALLURE_DIR}",
+                        "--alluredir=/app/allure-results", // Фиксированный путь внутри контейнера!
                         "--clean-alluredir",
                         "${HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
@@ -84,7 +84,7 @@ pipeline {
                 }
             }
         }
-    }
+    } // <- ЭТА СКОБКА БЫЛА ПРОПУЩЕНА (закрывает блок stages)
 
     post {
         always {
