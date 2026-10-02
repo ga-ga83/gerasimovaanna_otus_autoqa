@@ -1,16 +1,9 @@
 pipeline {
     agent any
 
-    // Используем встроенный автоматический установщик Jenkins
-    tools {
-        dockerTool 'default'
-    }
-
     parameters {
         string(name: 'IMAGE_FULL', defaultValue: 'gerasimovaanna_otus_autoqa-tests:latest', description: 'Docker-образ с тестами')
-        // Имя контейнера в сети docker — selenoid, порт внутри сети 4444
         string(name: 'SELENOID_URL', defaultValue: 'http://selenoid:4444/wd/hub', description: 'Адрес Selenoid')
-        // Внутри Docker-сети prestashop доступен на порту 80
         string(name: 'APP_URL', defaultValue: 'http://prestashop:80/', description: 'URL приложения')
         string(name: 'BROWSER_NAME', defaultValue: 'chrome', description: 'Браузер')
         string(name: 'BROWSER_VERSION', defaultValue: '128.0', description: 'Версия браузера')
@@ -22,9 +15,30 @@ pipeline {
         REPORTS_DIR = "${WORKSPACE}/reports"
         ALLURE_DIR = "${WORKSPACE}/allure-results"
         SCREENSHOTS_DIR = "${WORKSPACE}/screenshots"
+        // Путь, куда мы сохраним скачанный докер внутри воркспейса
+        DOCKER_BIN_DIR = "${WORKSPACE}/docker-cli-bin"
     }
 
     stages {
+        stage('Initialize Docker CLI') {
+            steps {
+                script {
+                    // Создаем папку и скачиваем официальный Linux-клиент в формате ZIP
+                    sh "mkdir -p ${DOCKER_BIN_DIR}"
+                    echo "=== Скачивание стабильного Linux Docker CLI ==="
+                    sh "curl -fsSL https://docker.com -o ${WORKSPACE}/docker.zip"
+
+                    echo "=== Распаковка бинарника ==="
+                    sh "unzip -o ${WORKSPACE}/docker.zip -d ${WORKSPACE}/tmp_extract"
+                    sh "mv ${WORKSPACE}/tmp_extract/docker/docker ${DOCKER_BIN_DIR}/docker"
+                    sh "chmod +x ${DOCKER_BIN_DIR}/docker"
+
+                    // Очищаем временные файлы
+                    sh "rm -rf ${WORKSPACE}/docker.zip ${WORKSPACE}/tmp_extract"
+                }
+            }
+        }
+
         stage('Checkout') {
             steps {
                 checkout scm
@@ -33,8 +47,8 @@ pipeline {
 
         stage('Verify Docker') {
             steps {
-                // withEnv гарантирует, что скачанный плагином Docker CLI будет виден в PATH
-                withEnv(["PATH+DOCKER=${tool 'default'}/bin"]) {
+                // Добавляем нашу папку с бинарником в PATH текущего шага
+                withEnv(["PATH+DOCKER=${DOCKER_BIN_DIR}"]) {
                     sh 'docker --version'
                 }
             }
@@ -51,7 +65,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                withEnv(["PATH+DOCKER=${tool 'default'}/bin"]) {
+                withEnv(["PATH+DOCKER=${DOCKER_BIN_DIR}"]) {
                     sh "docker build -t ${IMAGE_FULL} ."
                 }
             }
@@ -73,7 +87,7 @@ pipeline {
                     ].findAll { it.trim() != '' }.join(' ')
 
                     echo "=== Запуск тестов из образа: ${IMAGE_FULL} ==="
-                    withEnv(["PATH+DOCKER=${tool 'default'}/bin"]) {
+                    withEnv(["PATH+DOCKER=${DOCKER_BIN_DIR}"]) {
                         sh """
                             docker run --rm \
                               --user root \
