@@ -18,24 +18,6 @@ pipeline {
         DOCKER_BIN_DIR = "${WORKSPACE}/docker-cli-bin"
     }
 
-    stages {
-        stage('Initialize Docker CLI') {
-            steps {
-                script {
-                    sh "mkdir -p ${DOCKER_BIN_DIR}"
-                    echo "=== Скачивание стабильного Linux Docker CLI ==="
-                    sh "curl -fsSL https://docker.com -o ${WORKSPACE}/docker.zip"
-
-                    echo "=== Распаковка бинарника ==="
-                    sh "unzip -o ${WORKSPACE}/docker.zip -d ${WORKSPACE}/tmp_extract"
-                    sh "mv ${WORKSPACE}/tmp_extract/docker/docker ${DOCKER_BIN_DIR}/docker"
-                    sh "chmod +x ${DOCKER_BIN_DIR}/docker"
-
-                    sh "rm -rf ${WORKSPACE}/docker.zip ${WORKSPACE}/tmp_extract"
-                }
-            }
-        }
-
         stage('Checkout') {
             steps {
                 checkout scm
