@@ -19,13 +19,12 @@ pipeline {
         DOCKER_BIN_DIR = "${WORKSPACE}/docker-cli-bin"
     }
 
-    stages {
-        stage('Initialize Docker CLI') {
+    stage('Initialize Docker CLI') {
             steps {
                 script {
-                    // Создаем папку и скачиваем официальный Linux-клиент в формате ZIP
                     sh "mkdir -p ${DOCKER_BIN_DIR}"
                     echo "=== Скачивание стабильного Linux Docker CLI ==="
+                    // Прямой URL на скачивание актуального Linux-клиента
                     sh "curl -fsSL https://docker.com -o ${WORKSPACE}/docker.zip"
 
                     echo "=== Распаковка бинарника ==="
