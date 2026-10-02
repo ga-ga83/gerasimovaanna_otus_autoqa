@@ -15,9 +15,9 @@ pipeline {
         REPORTS_DIR = "${WORKSPACE}/reports"
         ALLURE_DIR = "${WORKSPACE}/allure-results"
         SCREENSHOTS_DIR = "${WORKSPACE}/screenshots"
-        DOCKER_BIN_DIR = "${WORKSPACE}/docker-cli-bin"
     }
 
+    stages {
         stage('Checkout') {
             steps {
                 checkout scm
@@ -26,9 +26,7 @@ pipeline {
 
         stage('Verify Docker') {
             steps {
-                withEnv(["PATH+DOCKER=${DOCKER_BIN_DIR}"]) {
-                    sh 'docker --version'
-                }
+                sh 'docker --version'
             }
         }
 
@@ -43,9 +41,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                withEnv(["PATH+DOCKER=${DOCKER_BIN_DIR}"]) {
-                    sh "docker build -t ${IMAGE_FULL} ."
-                }
+                sh "docker build -t ${IMAGE_FULL} ."
             }
         }
 
@@ -65,18 +61,16 @@ pipeline {
                     ].findAll { it.trim() != '' }.join(' ')
 
                     echo "=== Запуск тестов из образа: ${IMAGE_FULL} ==="
-                    withEnv(["PATH+DOCKER=${DOCKER_BIN_DIR}"]) {
-                        sh """
-                            docker run --rm \
-                              --user root \
-                              --network ${NETWORK_NAME} \
-                              -v ${REPORTS_DIR}:/app/reports \
-                              -v ${ALLURE_DIR}:/app/allure-results \
-                              -v ${SCREENSHOTS_DIR}:/app/screenshots \
-                              ${IMAGE_FULL} \
-                              python -m pytest ${pytestArgs}
-                        """
-                    }
+                    sh """
+                        docker run --rm \
+                          --user root \
+                          --network ${NETWORK_NAME} \
+                          -v ${REPORTS_DIR}:/app/reports \
+                          -v ${ALLURE_DIR}:/app/allure-results \
+                          -v ${SCREENSHOTS_DIR}:/app/screenshots \
+                          ${IMAGE_FULL} \
+                          python -m pytest ${pytestArgs}
+                    """
                 }
             }
             post {
