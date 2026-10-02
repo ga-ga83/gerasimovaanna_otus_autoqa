@@ -15,16 +15,15 @@ pipeline {
         REPORTS_DIR = "${WORKSPACE}/reports"
         ALLURE_DIR = "${WORKSPACE}/allure-results"
         SCREENSHOTS_DIR = "${WORKSPACE}/screenshots"
-        // Путь, куда мы сохраним скачанный докер внутри воркспейса
         DOCKER_BIN_DIR = "${WORKSPACE}/docker-cli-bin"
     }
 
-    stage('Initialize Docker CLI') {
+    stages {
+        stage('Initialize Docker CLI') {
             steps {
                 script {
                     sh "mkdir -p ${DOCKER_BIN_DIR}"
                     echo "=== Скачивание стабильного Linux Docker CLI ==="
-                    // Прямой URL на скачивание актуального Linux-клиента
                     sh "curl -fsSL https://docker.com -o ${WORKSPACE}/docker.zip"
 
                     echo "=== Распаковка бинарника ==="
@@ -32,7 +31,6 @@ pipeline {
                     sh "mv ${WORKSPACE}/tmp_extract/docker/docker ${DOCKER_BIN_DIR}/docker"
                     sh "chmod +x ${DOCKER_BIN_DIR}/docker"
 
-                    // Очищаем временные файлы
                     sh "rm -rf ${WORKSPACE}/docker.zip ${WORKSPACE}/tmp_extract"
                 }
             }
@@ -46,7 +44,6 @@ pipeline {
 
         stage('Verify Docker') {
             steps {
-                // Добавляем нашу папку с бинарником в PATH текущего шага
                 withEnv(["PATH+DOCKER=${DOCKER_BIN_DIR}"]) {
                     sh 'docker --version'
                 }
