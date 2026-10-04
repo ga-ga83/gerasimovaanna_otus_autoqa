@@ -45,7 +45,7 @@ pipeline {
             }
         }
 
-        stage('Run Tests') {
+         stage('Run Tests') {
             steps {
                 script {
                     def pytestArgs = [
@@ -55,7 +55,7 @@ pipeline {
                         "--browser-version=${BROWSER_VERSION}",
                         "--selenoid-url=${SELENOID_URL}",
                         "-v",
-                        "--alluredir=/app/allure-results", // Фиксированный путь внутри контейнера!
+                        "--alluredir=/app/allure-results",
                         "--clean-alluredir",
                         "${HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
@@ -71,24 +71,21 @@ pipeline {
                           ${IMAGE_FULL} \
                           python -m pytest ${pytestArgs}
                     """
+
+                    // ДИАГНОСТИКА: Проверяем, что файлы действительно появились на агенте
+                    echo "=== Проверка файлов Allure на агенте ==="
+                    sh "ls -R ${ALLURE_DIR}"
                 }
             }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'reports/**/*', allowEmptyArchive: true
-                    archiveArtifacts artifacts: 'screenshots/**/*', allowEmptyArchive: true
-                    archiveArtifacts artifacts: 'allure-results/**/*', allowEmptyArchive: true
-                }
-                failure {
-                    echo 'Тесты упали.'
-                }
-            }
+            // Блок post внутри стадии можно убрать, если он только для архивации
         }
-    } // <- ЭТА СКОБКА БЫЛА ПРОПУЩЕНА (закрывает блок stages)
+
+    } // Закрытие stages
 
     post {
         always {
             script {
+                // ВАЖНО: Имя здесь должно ТОЧНО совпадать с Name в Manage Jenkins -> Tools
                 allure([
                     includeProperties: false,
                     jdk: '',
