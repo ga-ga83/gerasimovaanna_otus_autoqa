@@ -27,7 +27,6 @@ pipeline {
         stage('Verify Docker') {
             steps {
                 sh 'docker --version'
-                sh 'docker compose version'
             }
         }
 
@@ -42,8 +41,8 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                // Используем docker compose для сборки сервиса 'tests', подменяя тег образа из параметров
-                sh "IMAGE_FULL=${params.IMAGE_FULL} docker compose build tests"
+                // Строим образ напрямую через docker build с корректным параметром имени
+                sh "docker build -t ${params.IMAGE_FULL} ."
             }
         }
 
@@ -62,14 +61,16 @@ pipeline {
                         "${params.HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
 
-                    echo "=== Запуск тестов из сервиса tests ==="
-                    // Запуск через docker compose автоматически поднимет зависимости (Prestashop, Selenoid, MySQL)
+                    echo "=== Запуск тестов из образа: ${params.IMAGE_FULL} ==="
                     sh """
-                        IMAGE_FULL=${params.IMAGE_FULL} docker compose run --rm \
+                        docker run --rm \
+                          --user root \
+                          --network ${NETWORK_NAME} \
                           -v ${REPORTS_DIR}:/app/reports \
                           -v ${ALLURE_DIR}:/app/allure-results \
                           -v ${SCREENSHOTS_DIR}:/app/screenshots \
-                          tests python -m pytest ${pytestArgs}
+                          ${params.IMAGE_FULL} \
+                          python -m pytest ${pytestArgs}
                     """
 
                     echo "=== Проверка файлов Allure на агенте ==="
