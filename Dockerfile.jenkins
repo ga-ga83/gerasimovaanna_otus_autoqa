@@ -1,8 +1,9 @@
 FROM jenkins/jenkins:lts-jdk21
 
+# Переключаемся на root, чтобы поставить docker-cli
 USER root
 
-# Добавляем репозиторий Docker, чтобы получить свежий клиент docker-ce-cli
+# Ставим зависимости для добавления репозитория Docker
 RUN apt-get update && \
     apt-get install -y \
         ca-certificates \
@@ -18,4 +19,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends docker-ce-cli && \
     rm -rf /var/lib/apt/lists/*
 
+# Возвращаемся к пользователю jenkins (как в оригинальном образе)
 USER jenkins
+
+# ВАЖНО: мы НЕ пишем CMD. Оставляем стандартный CMD из jenkins/jenkins,
+# который запускает Jenkins.
