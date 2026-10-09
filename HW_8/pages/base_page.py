@@ -10,7 +10,7 @@ class BasePage:
     def __init__(self, driver: WebDriver, base_url: str, logger: logging.Logger = None):
         self.driver = driver
         self.base_url = base_url
-        self.wait = WebDriverWait(driver, timeout=10)
+        self.wait = WebDriverWait(self.driver, 45)  # Увеличили в 3 раза
         self.logger = logger or logging.getLogger(self.__class__.__name__)
 
     def open(self, url=None):
