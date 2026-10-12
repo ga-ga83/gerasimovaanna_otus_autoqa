@@ -36,7 +36,7 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                echo "=== Сборка Docker-образа с передачей UID/GID ==="
+                echo "=== Сборка Docker-образа ==="
                 sh """
                     docker build \
                         --build-arg UID=\$(id -u) \
@@ -50,7 +50,7 @@ pipeline {
             steps {
                 script {
                     def pytestArgsList = [
-                        "HW_8/test_prestashop_all.py",
+                        "HW_8/test_prestashop_all.py",  // Проверь, что этот путь верный в репозитории!
                         "--base-url=${params.APP_URL}",
                         "--browser=${params.BROWSER_NAME}",
                         "--browser-version=${params.BROWSER_VERSION}",
@@ -61,9 +61,7 @@ pipeline {
                     ]
 
                     def pytestArgs = pytestArgsList.findAll { it.trim() != '' }.join(' ')
-
-                    echo "=== Аргументы для pytest ==="
-                    echo "[DEBUG] Команда запуска: python -m pytest ${pytestArgs}"
+                    echo "[DEBUG] Запуск: python -m pytest ${pytestArgs}"
 
                     try {
                         sh """
@@ -76,18 +74,11 @@ pipeline {
                                 python -m pytest ${pytestArgs}
                         """
                     } catch (Exception e) {
-                        echo "❌ Тесты завершились с ошибками: ${e.message}"
+                        echo "❌ Тесты упали: ${e.message}"
                         currentBuild.result = 'FAILURE'
                     } finally {
-                        echo "=== Проверка файлов Allure на агенте ==="
-                        sh "ls -lhR ${ALLURE_DIR} || echo 'Папка пуста или не существует'"
-
-                        def reportDir = "${WORKSPACE}/allure-report"
-                        if (fileExists("${reportDir}/index.html")) {
-                            echo "Отчёт Allure успешно сгенерирован: ${reportDir}/index.html"
-                        } else {
-                            echo "index.html пока не найден. Он будет создан на этапе post."
-                        }
+                        echo "=== Содержимое папки allure-results ==="
+                        sh "ls -lhR ${ALLURE_DIR} || echo 'Папка пуста'"
                     }
                 }
             }
@@ -97,27 +88,26 @@ pipeline {
     post {
         always {
             script {
-                echo "=== Генерация Allure отчета (post-action) ==="
+                echo "=== Генерация Allure отчета ==="
                 allure([
                     includeProperties: false,
                     jdk: '',
-                    // properties убран — он вызывал ошибку из-за лишней запятой
                     reportBuildPolicy: 'ALWAYS',
                     results: [[path: 'allure-results']],
-                    commandline: 'Allure 2.29.0'
+                    commandline: 'Allure 2.29.0'  // Имя инструмента из Global Tool Configuration
                 ])
 
                 def reportDir = "${WORKSPACE}/allure-report"
                 if (fileExists("${reportDir}/index.html")) {
-                    echo "Allure Report готов: ${reportDir}/index.html"
+                    echo "✅ Allure Report готов: ${reportDir}/index.html"
                 } else {
-                    echo "Ошибка: папка allure-report создана, но index.html отсутствует. Проверьте логи Allure CLI."
+                    error "❌ Ошибка генерации отчета: index.html не найден. Проверь логи Allure CLI."
                 }
             }
             archiveArtifacts artifacts: 'allure-report/**', fingerprint: true
         }
         failure {
-            echo "Пайплайн упал. Проверьте логи и права на папки."
+            echo "Пайплайн завершился с ошибкой."
         }
         cleanup {
             echo "Очистка завершена."
