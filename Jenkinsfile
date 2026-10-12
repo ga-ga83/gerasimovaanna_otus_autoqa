@@ -34,21 +34,22 @@ pipeline {
             steps {
                 script {
                     echo "=== Очистка и подготовка директорий ==="
+                    // Удаляем старые папки, чтобы не было конфликтов прав
                     sh "rm -rf ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
+
+                    // Создаём чистые папки
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
 
-                    // ВАЖНО: вместо chmod 777 лучше выставить владельца под текущего пользователя Jenkins.
-                    // Это безопаснее и решает проблему прав без «всех на всё».
-                    def currentUid = sh(script: 'id -u', returnStdout: true).trim()
-                    def currentGid = sh(script: 'id -g', returnStdout: true).trim()
-
-                    sh "chown -R ${currentUid}:${currentGid} ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
+                    // КРИТИЧЕСКИ ВАЖНО: отдаём права на папки пользователю с UID=1000 (testuser из Dockerfile).
+                    // Это решает ошибку PermissionError при записи Allure-файлов (.json.tmp)
+                    sh "chown -R 1000:1000 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                 }
             }
         }
 
         stage('Build Docker Image') {
             steps {
+                echo "=== Сборка Docker-образа ==="
                 sh "docker build -t ${params.IMAGE_FULL} ."
             }
         }
@@ -70,8 +71,8 @@ pipeline {
                     echo "=== Запуск тестов из образа: ${params.IMAGE_FULL} ==="
 
                     try {
-                        // ГЛАВНОЕ ИЗМЕНЕНИЕ: убрали --user ${uid}:${gid}.
-                        // Пользователь уже задан в Dockerfile через USER testuser.
+                        // ВАЖНО: НЕ используем флаг --user.
+                        // Пользователь testuser (UID 1000) уже задан в Dockerfile через инструкцию USER testuser.
                         sh """
                             docker run --rm \
                               --network ${NETWORK_NAME} \
@@ -82,10 +83,11 @@ pipeline {
                               python -m pytest ${pytestArgs}
                         """
                     } catch (Exception e) {
-                        echo "Тесты завершились с ошибками или упали: ${e.message}"
+                        echo "Тесты завершились с ошибками: ${e.message}"
                         currentBuild.result = 'FAILURE'
                     } finally {
                         echo "=== Проверка сгенерированных файлов Allure на агенте ==="
+                        // Эта команда покажет, что файлы действительно создались и имеют правильные права
                         sh "ls -lhR ${ALLURE_DIR}"
                     }
                 }
@@ -106,6 +108,9 @@ pipeline {
                     commandline: 'Allure 2.29.0'
                 ])
             }
+        }
+        failure {
+            echo "Пайплайн упал. Проверь логи и права на папки."
         }
     }
 }
