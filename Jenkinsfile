@@ -24,77 +24,93 @@ pipeline {
             }
         }
 
-        stage('Verify Docker') {
+        stage('Verify & Prepare Workspace') {
             steps {
                 sh 'docker --version'
-            }
-        }
-
-        stage('Prepare Environment') {
-            steps {
-                script {
-                    sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-                    sh "chmod -R 755 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-                }
+                echo "=== Подготовка директорий ==="
+                sh '''
+                    mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
+                '''
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${IMAGE_FULL} ."
+                echo "=== Сборка Docker-образа ==="
+                sh """
+                    docker build \
+                        --build-arg UID=\$(id -u) \
+                        --build-arg GID=\$(id -g) \
+                        -t ${params.IMAGE_FULL} .
+                """
             }
         }
 
-         stage('Run Tests') {
+        stage('Run Tests') {
             steps {
                 script {
-                    def pytestArgs = [
-                        "HW_8/test_prestashop_all.py",
-                        "--base-url=${APP_URL}",
-                        "--browser=${BROWSER_NAME}",
-                        "--browser-version=${BROWSER_VERSION}",
-                        "--selenoid-url=${SELENOID_URL}",
+                    def pytestArgsList = [
+                        "HW_8/test_prestashop_all.py",  // Проверь, что этот путь верный в репозитории!
+                        "--base-url=${params.APP_URL}",
+                        "--browser=${params.BROWSER_NAME}",
+                        "--browser-version=${params.BROWSER_VERSION}",
+                        "--selenoid-url=${params.SELENOID_URL}",
                         "-v",
                         "--alluredir=/app/allure-results",
-                        "--clean-alluredir",
-                        "${HEADLESS_FLAG}".trim()
-                    ].findAll { it.trim() != '' }.join(' ')
+                        "${params.HEADLESS_FLAG}".trim()
+                    ]
 
-                    echo "=== Запуск тестов из образа: ${IMAGE_FULL} ==="
-                    sh """
-                        docker run --rm \
-                          --user root \
-                          --network ${NETWORK_NAME} \
-                          -v ${REPORTS_DIR}:/app/reports \
-                          -v ${ALLURE_DIR}:/app/allure-results \
-                          -v ${SCREENSHOTS_DIR}:/app/screenshots \
-                          ${IMAGE_FULL} \
-                          python -m pytest ${pytestArgs}
-                    """
+                    def pytestArgs = pytestArgsList.findAll { it.trim() != '' }.join(' ')
+                    echo "[DEBUG] Запуск: python -m pytest ${pytestArgs}"
 
-                    // ДИАГНОСТИКА: Проверяем, что файлы действительно появились на агенте
-                    echo "=== Проверка файлов Allure на агенте ==="
-                    sh "ls -R ${ALLURE_DIR}"
+                    try {
+                        sh """
+                            docker run --rm \\
+                                --network ${NETWORK_NAME} \\
+                                -v ${REPORTS_DIR}:/app/reports \\
+                                -v ${ALLURE_DIR}:/app/allure-results \\
+                                -v ${SCREENSHOTS_DIR}:/app/screenshots \\
+                                ${params.IMAGE_FULL} \\
+                                python -m pytest ${pytestArgs}
+                        """
+                    } catch (Exception e) {
+                        echo "❌ Тесты упали: ${e.message}"
+                        currentBuild.result = 'FAILURE'
+                    } finally {
+                        echo "=== Содержимое папки allure-results ==="
+                        sh "ls -lhR ${ALLURE_DIR} || echo 'Папка пуста'"
+                    }
                 }
             }
-            // Блок post внутри стадии можно убрать, если он только для архивации
         }
-
-    } // Закрытие stages
+    }
 
     post {
         always {
             script {
-                // ВАЖНО: Имя здесь должно ТОЧНО совпадать с Name в Manage Jenkins -> Tools
+                echo "=== Генерация Allure отчета ==="
                 allure([
                     includeProperties: false,
                     jdk: '',
-                    properties: [],
                     reportBuildPolicy: 'ALWAYS',
-                    results: [[path: ALLURE_DIR]],
-                    commandline: 'Allure 2.29.0'
+                    results: [[path: 'allure-results']],
+                    commandline: 'Allure 2.29.0'  // Имя инструмента из Global Tool Configuration
                 ])
+
+                def reportDir = "${WORKSPACE}/allure-report"
+                if (fileExists("${reportDir}/index.html")) {
+                    echo "✅ Allure Report готов: ${reportDir}/index.html"
+                } else {
+                    error "❌ Ошибка генерации отчета: index.html не найден. Проверь логи Allure CLI."
+                }
             }
+            archiveArtifacts artifacts: 'allure-report/**', fingerprint: true
+        }
+        failure {
+            echo "Пайплайн завершился с ошибкой."
+        }
+        cleanup {
+            echo "Очистка завершена."
         }
     }
 }

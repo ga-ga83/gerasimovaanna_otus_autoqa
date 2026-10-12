@@ -1,7 +1,10 @@
 FROM python:3.11-slim-bookworm
 
-USER root
+# Передаём UID и GID из Jenkins (по умолчанию 1000:1000)
+ARG UID=1000
+ARG GID=1000
 
+USER root
 WORKDIR /app
 
 # ── Системные зависимости для Chrome и Firefox ──
@@ -45,14 +48,20 @@ RUN wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# ── Копируем весь код проекта ──
 COPY . .
 
-# ── Создание непривилегированного пользователя ──
-RUN groupadd -r testuser && useradd -r -g testuser -G audio,video testuser \
-    && mkdir -p /home/testuser/Downloads \
-    && chown -R testuser:testuser /home/testuser \
-    && chown -R testuser:testuser /app
+# ── Создаём непривилегированного пользователя с переданным UID/GID ──
+# Важно: сначала создаём группу с нужным GID, потом пользователя с нужным UID
+RUN groupadd -r testuser -g ${GID} && \
+    useradd -r -u ${UID} -g testuser -G audio,video testuser && \
+    mkdir -p /home/testuser/Downloads /app/reports /app/allure-results /app/screenshots
 
+# Выставляем права на все директории под этого пользователя
+RUN chown -R testuser:testuser /home/testuser /app
+
+# Переключаемся на непривилегированного пользователя
 USER testuser
 
 CMD ["pytest", "-v"]
+
