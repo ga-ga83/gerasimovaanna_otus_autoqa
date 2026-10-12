@@ -12,9 +12,9 @@ pipeline {
 
     environment {
         NETWORK_NAME = 'prestashop_network'
-        REPORTS_DIR = "${WORKSPACE}/reports"
-        ALLURE_DIR = "${WORKSPACE}/allure-results"
-        SCREENSHOTS_DIR = "${WORKSPACE}/screenshots"
+        REPORTS_DIR = "\${WORKSPACE}/reports"
+        ALLURE_DIR = "\${WORKSPACE}/allure-results"
+        SCREENSHOTS_DIR = "\${WORKSPACE}/screenshots"
     }
 
     stages {
@@ -29,8 +29,7 @@ pipeline {
                 sh 'docker --version'
                 echo "=== Подготовка директорий ==="
                 sh '''
-                    mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
-                    # Права не выставляем (chmod 777), так как UID/GID передаются при сборке образа
+                    mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "\${SCREENSHOTS_DIR}"
                 '''
             }
         }
@@ -38,12 +37,11 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo "=== Сборка Docker-образа с передачей UID/GID ==="
-                // Важно: \$ экранирует $ для Groovy, чтобы shell внутри docker build увидел $(id -u)
                 sh """
                     docker build \
                         --build-arg UID=\$(id -u) \
                         --build-arg GID=\$(id -g) \
-                        -t ${params.IMAGE_FULL} .
+                        -t \${params.IMAGE_FULL} .
                 """
             }
         }
@@ -53,43 +51,40 @@ pipeline {
                 script {
                     def pytestArgsList = [
                         "HW_8/test_prestashop_all.py",
-                        "--base-url=${params.APP_URL}",
-                        "--browser=${params.BROWSER_NAME}",
-                        "--browser-version=${params.BROWSER_VERSION}",
-                        "--selenoid-url=${params.SELENOID_URL}",
+                        "--base-url=\${params.APP_URL}",
+                        "--browser=\${params.BROWSER_NAME}",
+                        "--browser-version=\${params.BROWSER_VERSION}",
+                        "--selenoid-url=\${params.SELENOID_URL}",
                         "-v",
                         "--alluredir=/app/allure-results",
-                        "${params.HEADLESS_FLAG}".trim()
+                        "\${params.HEADLESS_FLAG}".trim()
                     ]
 
-                    // Убираем пустые элементы и собираем строку
                     def pytestArgs = pytestArgsList.findAll { it.trim() != '' }.join(' ')
 
                     echo "=== Аргументы для pytest ==="
-                    echo "[DEBUG] Команда запуска: python -m pytest ${pytestArgs}"
+                    echo "[DEBUG] Команда запуска: python -m pytest \${pytestArgs}"
 
                     try {
                         sh """
                             docker run --rm \\
-                                --network ${NETWORK_NAME} \\
-                                -v ${REPORTS_DIR}:/app/reports \\
-                                -v ${ALLURE_DIR}:/app/allure-results \\
-                                -v ${SCREENSHOTS_DIR}:/app/screenshots \\
-                                ${params.IMAGE_FULL} \\
-                                python -m pytest ${pytestArgs}
+                                --network \${NETWORK_NAME} \\
+                                -v \${REPORTS_DIR}:/app/reports \\
+                                -v \${ALLURE_DIR}:/app/allure-results \\
+                                -v \${SCREENSHOTS_DIR}:/app/screenshots \\
+                                \${params.IMAGE_FULL} \\
+                                python -m pytest \${pytestArgs}
                         """
                     } catch (Exception e) {
-                        echo "❌ Тесты завершились с ошибками: ${e.message}"
+                        echo "❌ Тесты завершились с ошибками: \${e.message}"
                         currentBuild.result = 'FAILURE'
                     } finally {
                         echo "=== Проверка файлов Allure на агенте ==="
-                        // Сначала смотрим, что лежит в папке результатов
-                        sh "ls -lhR ${ALLURE_DIR} || echo 'Папка пуста или не существует'"
+                        sh "ls -lhR \${ALLURE_DIR} || echo 'Папка пуста или не существует'"
 
-                        // Проверяем, появился ли index.html после генерации (или если её запускали вручную)
-                        def reportDir = "${WORKSPACE}/allure-report"
-                        if (fileExists(reportDir + "/index.html")) {
-                            echo "✅ Отчёт Allure успешно сгенерирован: ${reportDir}/index.html"
+                        def reportDir = "\${WORKSPACE}/allure-report"
+                        if (fileExists("\${reportDir}/index.html")) {
+                            echo "✅ Отчёт Allure успешно сгенерирован: \${reportDir}/index.html"
                         } else {
                             echo "⚠️ index.html пока не найден. Он будет создан на этапе post."
                         }
@@ -106,20 +101,20 @@ pipeline {
                 allure([
                     includeProperties: false,
                     jdk: '',
-                    properties: [],
+                    properties: ,
                     reportBuildPolicy: 'ALWAYS',
                     results: [[path: 'allure-results']],
                     commandline: 'Allure 2.29.0'
                 ])
 
-                // Финальная проверка после генерации
-                def reportDir = "${WORKSPACE}/allure-report"
-                if (fileExists(reportDir + "/index.html")) {
-                    echo "🎉 Allure Report готов: откройте ${reportDir}/index.html в браузере или используйте ссылку в интерфейсе Jenkins."
+                def reportDir = "\${WORKSPACE}/allure-report"
+                if (fileExists("\${reportDir}/index.html")) {
+                    echo "🎉 Allure Report готов: \${reportDir}/index.html"
                 } else {
                     echo "❌ Ошибка: папка allure-report создана, но index.html отсутствует. Проверьте логи Allure CLI."
                 }
             }
+            archiveArtifacts artifacts: 'allure-report/**', fingerprint: true
         }
         failure {
             echo "Пайплайн упал. Проверьте логи и права на папки."
