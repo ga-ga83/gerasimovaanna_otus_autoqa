@@ -30,23 +30,6 @@ pipeline {
             }
         }
 
-        stage('Prepare Environment') {
-            steps {
-                script {
-                    echo "=== Очистка и подготовка директорий ==="
-                    // Удаляем старые папки, чтобы не было конфликтов прав
-                    sh "rm -rf ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-
-                    // Создаём чистые папки
-                    sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-
-                    // КРИТИЧЕСКИ ВАЖНО: отдаём права на папки пользователю с UID=1000 (testuser из Dockerfile).
-                    // Это решает ошибку PermissionError при записи Allure-файлов (.json.tmp)
-                    sh "chown -R 1000:1000 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-                }
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
                 echo "=== Сборка Docker-образа ==="
@@ -57,6 +40,11 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
+                    // Диагностика: смотрим реальный UID testuser внутри образа
+                    echo "=== Проверка UID пользователя testuser в образе ==="
+                    def uidInfo = sh(script: "docker run --rm ${params.IMAGE_FULL} id testuser", returnStdout: true).trim()
+                    echo "UID info: ${uidInfo}"
+
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
@@ -71,23 +59,20 @@ pipeline {
                     echo "=== Запуск тестов из образа: ${params.IMAGE_FULL} ==="
 
                     try {
-                        // ВАЖНО: НЕ используем флаг --user.
-                        // Пользователь testuser (UID 1000) уже задан в Dockerfile через инструкцию USER testuser.
                         sh """
-                            docker run --rm \
-                              --network ${NETWORK_NAME} \
-                              -v ${REPORTS_DIR}:/app/reports \
-                              -v ${ALLURE_DIR}:/app/allure-results \
-                              -v ${SCREENSHOTS_DIR}:/app/screenshots \
-                              ${params.IMAGE_FULL} \
-                              python -m pytest ${pytestArgs}
+                            docker run --rm \\
+                                --network ${NETWORK_NAME} \\
+                                -v ${REPORTS_DIR}:/app/reports \\
+                                -v ${ALLURE_DIR}:/app/allure-results \\
+                                -v ${SCREENSHOTS_DIR}:/app/screenshots \\
+                                ${params.IMAGE_FULL} \\
+                                sh -c 'chown -R 1000:1000 /app/allure-results /app/reports /app/screenshots && python -m pytest ${pytestArgs}'
                         """
                     } catch (Exception e) {
                         echo "Тесты завершились с ошибками: ${e.message}"
                         currentBuild.result = 'FAILURE'
                     } finally {
-                        echo "=== Проверка сгенерированных файлов Allure на агенте ==="
-                        // Эта команда покажет, что файлы действительно создались и имеют правильные права
+                        echo "=== Проверка файлов Allure на агенте ==="
                         sh "ls -lhR ${ALLURE_DIR}"
                     }
                 }
