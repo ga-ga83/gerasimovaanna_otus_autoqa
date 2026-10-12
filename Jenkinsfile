@@ -34,12 +34,15 @@ pipeline {
             steps {
                 script {
                     echo "=== Очистка и подготовка директорий ==="
-                    // Удаляем старые папки, чтобы отчеты не дублировались и не наслаивались
                     sh "rm -rf ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-                    // Выставляем полные права 777, чтобы у Docker-контейнера
-                    // не возникло конфликтов прав при записи файлов на хост-машину
-                    sh "chmod -R 777 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
+
+                    // ВАЖНО: вместо chmod 777 лучше выставить владельца под текущего пользователя Jenkins.
+                    // Это безопаснее и решает проблему прав без «всех на всё».
+                    def currentUid = sh(script: 'id -u', returnStdout: true).trim()
+                    def currentGid = sh(script: 'id -g', returnStdout: true).trim()
+
+                    sh "chown -R ${currentUid}:${currentGid} ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                 }
             }
         }
@@ -66,15 +69,11 @@ pipeline {
 
                     echo "=== Запуск тестов из образа: ${params.IMAGE_FULL} ==="
 
-                    // Динамически получаем UID и GID текущего пользователя Jenkins.
-                    // Это решает проблему, когда тесты падают из-за разницы прав root хоста и контейнера.
-                    def uid = sh(script: 'id -u', returnStdout: true).trim()
-                    def gid = sh(script: 'id -g', returnStdout: true).trim()
-
                     try {
+                        // ГЛАВНОЕ ИЗМЕНЕНИЕ: убрали --user ${uid}:${gid}.
+                        // Пользователь уже задан в Dockerfile через USER testuser.
                         sh """
                             docker run --rm \
-                              --user ${uid}:${gid} \
                               --network ${NETWORK_NAME} \
                               -v ${REPORTS_DIR}:/app/reports \
                               -v ${ALLURE_DIR}:/app/allure-results \
@@ -83,14 +82,11 @@ pipeline {
                               python -m pytest ${pytestArgs}
                         """
                     } catch (Exception e) {
-                        // Если тесты упали, мы ловим ошибку, чтобы pipeline не прервался
-                        // и мы смогли увидеть логи команды ls -R ниже
                         echo "Тесты завершились с ошибками или упали: ${e.message}"
                         currentBuild.result = 'FAILURE'
                     } finally {
                         echo "=== Проверка сгенерированных файлов Allure на агенте ==="
-                        // Если этот шаг покажет файлы .json, значит плагин Allure их точно увидит
-                        sh "ls -R ${ALLURE_DIR}"
+                        sh "ls -lhR ${ALLURE_DIR}"
                     }
                 }
             }
@@ -106,7 +102,6 @@ pipeline {
                     jdk: '',
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
-                    // Указываем относительный путь от корня WORKSPACE, соответствующий ALLURE_DIR
                     results: [[path: 'allure-results']],
                     commandline: 'Allure 2.29.0'
                 ])
