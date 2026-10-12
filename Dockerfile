@@ -1,7 +1,7 @@
 FROM python:3.11-slim-bookworm
 
+# Работаем от root, чтобы ставить пакеты и создавать пользователя
 USER root
-
 WORKDIR /app
 
 # ── Системные зависимости для Chrome и Firefox ──
@@ -45,14 +45,19 @@ RUN wget -q -O /tmp/google-chrome.deb https://dl.google.com/linux/direct/google-
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# ── Копируем весь код проекта ──
 COPY . .
 
-# ── Создание непривилегированного пользователя ──
+# ── Создаём непривилегированного пользователя и выставляем права ──
+# Сначала создаём пользователя и домашнюю папку
 RUN groupadd -r testuser && useradd -r -g testuser -G audio,video testuser \
-    && mkdir -p /home/testuser/Downloads \
-    && chown -R testuser:testuser /home/testuser \
-    && chown -R testuser:testuser /app
+    && mkdir -p /home/testuser/Downloads
 
+# ВАЖНО: отдаём права на всю рабочую директорию /app (включая все файлы из COPY)
+# Это решает PermissionError при записи Allure-результатов
+RUN chown -R testuser:testuser /home/testuser /app
+
+# Переключаемся на непривилегированного пользователя
 USER testuser
 
 CMD ["pytest", "-v"]
