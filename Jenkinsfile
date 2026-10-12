@@ -12,9 +12,9 @@ pipeline {
 
     environment {
         NETWORK_NAME = 'prestashop_network'
-        REPORTS_DIR = "\${WORKSPACE}/reports"
-        ALLURE_DIR = "\${WORKSPACE}/allure-results"
-        SCREENSHOTS_DIR = "\${WORKSPACE}/screenshots"
+        REPORTS_DIR = "${WORKSPACE}/reports"
+        ALLURE_DIR = "${WORKSPACE}/allure-results"
+        SCREENSHOTS_DIR = "${WORKSPACE}/screenshots"
     }
 
     stages {
@@ -29,7 +29,7 @@ pipeline {
                 sh 'docker --version'
                 echo "=== Подготовка директорий ==="
                 sh '''
-                    mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "\${SCREENSHOTS_DIR}"
+                    mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
                 '''
             }
         }
@@ -41,7 +41,7 @@ pipeline {
                     docker build \
                         --build-arg UID=\$(id -u) \
                         --build-arg GID=\$(id -g) \
-                        -t \${params.IMAGE_FULL} .
+                        -t ${params.IMAGE_FULL} .
                 """
             }
         }
@@ -51,42 +51,42 @@ pipeline {
                 script {
                     def pytestArgsList = [
                         "HW_8/test_prestashop_all.py",
-                        "--base-url=\${params.APP_URL}",
-                        "--browser=\${params.BROWSER_NAME}",
-                        "--browser-version=\${params.BROWSER_VERSION}",
-                        "--selenoid-url=\${params.SELENOID_URL}",
+                        "--base-url=${params.APP_URL}",
+                        "--browser=${params.BROWSER_NAME}",
+                        "--browser-version=${params.BROWSER_VERSION}",
+                        "--selenoid-url=${params.SELENOID_URL}",
                         "-v",
                         "--alluredir=/app/allure-results",
-                        "\${params.HEADLESS_FLAG}".trim()
+                        "${params.HEADLESS_FLAG}".trim()
                     ]
 
                     def pytestArgs = pytestArgsList.findAll { it.trim() != '' }.join(' ')
 
                     echo "=== Аргументы для pytest ==="
-                    echo "[DEBUG] Команда запуска: python -m pytest \${pytestArgs}"
+                    echo "[DEBUG] Команда запуска: python -m pytest ${pytestArgs}"
 
                     try {
                         sh """
                             docker run --rm \\
-                                --network \${NETWORK_NAME} \\
-                                -v \${REPORTS_DIR}:/app/reports \\
-                                -v \${ALLURE_DIR}:/app/allure-results \\
-                                -v \${SCREENSHOTS_DIR}:/app/screenshots \\
-                                \${params.IMAGE_FULL} \\
-                                python -m pytest \${pytestArgs}
+                                --network ${NETWORK_NAME} \\
+                                -v ${REPORTS_DIR}:/app/reports \\
+                                -v ${ALLURE_DIR}:/app/allure-results \\
+                                -v ${SCREENSHOTS_DIR}:/app/screenshots \\
+                                ${params.IMAGE_FULL} \\
+                                python -m pytest ${pytestArgs}
                         """
                     } catch (Exception e) {
-                        echo "❌ Тесты завершились с ошибками: \${e.message}"
+                        echo "❌ Тесты завершились с ошибками: ${e.message}"
                         currentBuild.result = 'FAILURE'
                     } finally {
                         echo "=== Проверка файлов Allure на агенте ==="
-                        sh "ls -lhR \${ALLURE_DIR} || echo 'Папка пуста или не существует'"
+                        sh "ls -lhR ${ALLURE_DIR} || echo 'Папка пуста или не существует'"
 
-                        def reportDir = "\${WORKSPACE}/allure-report"
-                        if (fileExists("\${reportDir}/index.html")) {
-                            echo "✅ Отчёт Allure успешно сгенерирован: \${reportDir}/index.html"
+                        def reportDir = "${WORKSPACE}/allure-report"
+                        if (fileExists("${reportDir}/index.html")) {
+                            echo "Отчёт Allure успешно сгенерирован: ${reportDir}/index.html"
                         } else {
-                            echo "⚠️ index.html пока не найден. Он будет создан на этапе post."
+                            echo "index.html пока не найден. Он будет создан на этапе post."
                         }
                     }
                 }
@@ -101,17 +101,17 @@ pipeline {
                 allure([
                     includeProperties: false,
                     jdk: '',
-                    properties: ,
+                    // properties убран — он вызывал ошибку из-за лишней запятой
                     reportBuildPolicy: 'ALWAYS',
                     results: [[path: 'allure-results']],
                     commandline: 'Allure 2.29.0'
                 ])
 
-                def reportDir = "\${WORKSPACE}/allure-report"
-                if (fileExists("\${reportDir}/index.html")) {
-                    echo "🎉 Allure Report готов: \${reportDir}/index.html"
+                def reportDir = "${WORKSPACE}/allure-report"
+                if (fileExists("${reportDir}/index.html")) {
+                    echo "Allure Report готов: ${reportDir}/index.html"
                 } else {
-                    echo "❌ Ошибка: папка allure-report создана, но index.html отсутствует. Проверьте логи Allure CLI."
+                    echo "Ошибка: папка allure-report создана, но index.html отсутствует. Проверьте логи Allure CLI."
                 }
             }
             archiveArtifacts artifacts: 'allure-report/**', fingerprint: true
