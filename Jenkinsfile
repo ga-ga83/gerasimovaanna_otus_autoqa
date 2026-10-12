@@ -30,6 +30,8 @@ pipeline {
             }
         }
 
+        // Если образ уже собран локально и ты просто тестируешь пайплайн,
+        // эту стадию можно убрать. Если нужно собирать каждый раз — оставь.
         stage('Build Docker Image') {
             steps {
                 echo "=== Сборка Docker-образа ==="
@@ -40,11 +42,6 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // Диагностика: смотрим реальный UID testuser внутри образа
-                    echo "=== Проверка UID пользователя testuser в образе ==="
-                    def uidInfo = sh(script: "docker run --rm ${params.IMAGE_FULL} id testuser", returnStdout: true).trim()
-                    echo "UID info: ${uidInfo}"
-
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
@@ -66,7 +63,7 @@ pipeline {
                                 -v ${ALLURE_DIR}:/app/allure-results \\
                                 -v ${SCREENSHOTS_DIR}:/app/screenshots \\
                                 ${params.IMAGE_FULL} \\
-                                sh -c 'chown -R 1000:1000 /app/allure-results /app/reports /app/screenshots && python -m pytest ${pytestArgs}'
+                                python -m pytest ${pytestArgs}
                         """
                     } catch (Exception e) {
                         echo "Тесты завершились с ошибками: ${e.message}"
