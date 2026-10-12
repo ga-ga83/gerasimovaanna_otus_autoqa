@@ -88,7 +88,7 @@ pipeline {
                     jdk: '',
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
-                    results: [[path: ALLURE_DIR]],
+                    results: [[path: 'allure-results']], // Используем ОТНОСИТЕЛЬНЫЙ путь
                     commandline: 'Allure 2.29.0'
                 ])
             }
