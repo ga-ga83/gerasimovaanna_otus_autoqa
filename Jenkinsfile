@@ -33,15 +33,19 @@ pipeline {
         stage('Prepare Environment') {
             steps {
                 script {
+                    echo "=== Очистка и подготовка директорий ==="
+                    // Удаляем старые папки, чтобы отчеты не дублировались и не наслаивались
+                    sh "rm -rf ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-                    sh "chmod -R 755 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
+                    // Выставляем полные права 777, чтобы у Docker-контейнера под пользователем root
+                    // не возникло конфликтов прав при записи файлов на хост-машину
+                    sh "chmod -R 777 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                 }
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                // Строим образ напрямую через docker build с корректным параметром имени
                 sh "docker build -t ${params.IMAGE_FULL} ."
             }
         }
@@ -49,6 +53,8 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
+                    // Флаг --clean-alluredir УДАЛЕН, так как он пытается удалить примонтированную
+                    // директорию /app/allure-results внутри контейнера, что вызывает ошибку в Docker.
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
@@ -57,7 +63,6 @@ pipeline {
                         "--selenoid-url=${params.SELENOID_URL}",
                         "-v",
                         "--alluredir=/app/allure-results",
-                        "--clean-alluredir",
                         "${params.HEADLESS_FLAG}".trim()
                     ].findAll { it.trim() != '' }.join(' ')
 
@@ -73,7 +78,8 @@ pipeline {
                           python -m pytest ${pytestArgs}
                     """
 
-                    echo "=== Проверка файлов Allure на агенте ==="
+                    echo "=== Проверка сгенерированных файлов Allure на агенте ==="
+                    // Если этот шаг покажет файлы .json, значит тесты успешно записали результаты
                     sh "ls -R ${ALLURE_DIR}"
                 }
             }
@@ -83,12 +89,14 @@ pipeline {
     post {
         always {
             script {
+                echo "=== Генерация Allure отчета ==="
                 allure([
                     includeProperties: false,
                     jdk: '',
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
-                    results: [[path: 'allure-results']], // Используем ОТНОСИТЕЛЬНЫЙ путь
+                    // Указываем относительный путь от корня WORKSPACE, соответствующий ALLURE_DIR
+                    results: [[path: 'allure-results']],
                     commandline: 'Allure 2.29.0'
                 ])
             }
