@@ -37,7 +37,7 @@ pipeline {
                     // Удаляем старые папки, чтобы отчеты не дублировались и не наслаивались
                     sh "rm -rf ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                     sh "mkdir -p ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
-                    // Выставляем полные права 777, чтобы у Docker-контейнера под пользователем root
+                    // Выставляем полные права 777, чтобы у Docker-контейнера
                     // не возникло конфликтов прав при записи файлов на хост-машину
                     sh "chmod -R 777 ${REPORTS_DIR} ${ALLURE_DIR} ${SCREENSHOTS_DIR}"
                 }
@@ -53,8 +53,6 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // Флаг --clean-alluredir УДАЛЕН, так как он пытается удалить примонтированную
-                    // директорию /app/allure-results внутри контейнера, что вызывает ошибку в Docker.
                     def pytestArgs = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
@@ -67,20 +65,33 @@ pipeline {
                     ].findAll { it.trim() != '' }.join(' ')
 
                     echo "=== Запуск тестов из образа: ${params.IMAGE_FULL} ==="
-                    sh """
-                        docker run --rm \
-                          --user root \
-                          --network ${NETWORK_NAME} \
-                          -v ${REPORTS_DIR}:/app/reports \
-                          -v ${ALLURE_DIR}:/app/allure-results \
-                          -v ${SCREENSHOTS_DIR}:/app/screenshots \
-                          ${params.IMAGE_FULL} \
-                          python -m pytest ${pytestArgs}
-                    """
 
-                    echo "=== Проверка сгенерированных файлов Allure на агенте ==="
-                    // Если этот шаг покажет файлы .json, значит тесты успешно записали результаты
-                    sh "ls -R ${ALLURE_DIR}"
+                    // Динамически получаем UID и GID текущего пользователя Jenkins.
+                    // Это решает проблему, когда тесты падают из-за разницы прав root хоста и контейнера.
+                    def uid = sh(script: 'id -u', returnStdout: true).trim()
+                    def gid = sh(script: 'id -g', returnStdout: true).trim()
+
+                    try {
+                        sh """
+                            docker run --rm \
+                              --user ${uid}:${gid} \
+                              --network ${NETWORK_NAME} \
+                              -v ${REPORTS_DIR}:/app/reports \
+                              -v ${ALLURE_DIR}:/app/allure-results \
+                              -v ${SCREENSHOTS_DIR}:/app/screenshots \
+                              ${params.IMAGE_FULL} \
+                              python -m pytest ${pytestArgs}
+                        """
+                    } catch (Exception e) {
+                        // Если тесты упали, мы ловим ошибку, чтобы pipeline не прервался
+                        // и мы смогли увидеть логи команды ls -R ниже
+                        echo "Тесты завершились с ошибками или упали: ${e.message}"
+                        currentBuild.result = 'FAILURE'
+                    } finally {
+                        echo "=== Проверка сгенерированных файлов Allure на агенте ==="
+                        // Если этот шаг покажет файлы .json, значит плагин Allure их точно увидит
+                        sh "ls -R ${ALLURE_DIR}"
+                    }
                 }
             }
         }
