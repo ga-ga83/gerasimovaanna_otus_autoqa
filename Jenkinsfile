@@ -24,14 +24,21 @@ pipeline {
             }
         }
 
-        stage('Verify Docker') {
+        stage('Verify & Prepare Workspace') {
             steps {
                 sh 'docker --version'
+                echo "=== Подготовка директорий и выдача прав ==="
+                // Создаем папки заранее на хосте от имени пользователя jenkins
+                // и даем полные права, чтобы root-пользователь внутри Docker мог в них писать
+                sh '''
+                    mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
+                    chmod -R 777 "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
+                '''
             }
         }
 
-        // Если образ уже собран локально и ты просто тестируешь пайплайн,
-        // эту стадию можно убрать. Если нужно собирать каждый раз — оставь.
+        // Если образ уже собран локально и вы просто тестируете пайплайн,
+        // эту стадию можно убрать. Если нужно собирать каждый раз — оставьте.
         stage('Build Docker Image') {
             steps {
                 echo "=== Сборка Docker-образа ==="
@@ -70,7 +77,13 @@ pipeline {
                         currentBuild.result = 'FAILURE'
                     } finally {
                         echo "=== Проверка файлов Allure на агенте ==="
-                        sh "ls -lhR ${ALLURE_DIR}"
+                        // Используем || true, чтобы пайплайн не падал, даже если папка пустая
+                        sh "ls -lhR ${ALLURE_DIR} || true"
+
+                        echo "=== Возврат прав пользователю Jenkins ==="
+                        // Если файлы внутри контейнера создались от root, возвращаем права текущему UID/GID,
+                        // чтобы плагин Allure в Jenkins смог их прочитать и очистить рабочую область позже
+                        sh "docker run --rm -v ${WORKSPACE}:/workspace alpine chown -R \$(id -u):\$(id -g) /workspace || true"
                     }
                 }
             }
@@ -92,7 +105,7 @@ pipeline {
             }
         }
         failure {
-            echo "Пайплайн упал. Проверь логи и права на папки."
+            echo "Пайплайн упал. Проверьте логи и права на папки."
         }
     }
 }
