@@ -30,6 +30,7 @@ pipeline {
                 echo "=== Подготовка директорий ==="
                 sh '''
                     mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
+                    # Права не выставляем (chmod 777), так как UID/GID передаются при сборке образа
                 '''
             }
         }
@@ -37,6 +38,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo "=== Сборка Docker-образа с передачей UID/GID ==="
+                // Важно: \$ экранирует $ для Groovy, чтобы shell внутри docker build увидел $(id -u)
                 sh """
                     docker build \
                         --build-arg UID=\$(id -u) \
@@ -49,7 +51,7 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    def pytestArgs = [
+                    def pytestArgsList = [
                         "HW_8/test_prestashop_all.py",
                         "--base-url=${params.APP_URL}",
                         "--browser=${params.BROWSER_NAME}",
@@ -58,9 +60,13 @@ pipeline {
                         "-v",
                         "--alluredir=/app/allure-results",
                         "${params.HEADLESS_FLAG}".trim()
-                    ].findAll { it.trim() != '' }.join(' ')
+                    ]
 
-                    echo "=== Запуск тестов из образа: ${params.IMAGE_FULL} ==="
+                    // Убираем пустые элементы и собираем строку
+                    def pytestArgs = pytestArgsList.findAll { it.trim() != '' }.join(' ')
+
+                    echo "=== Аргументы для pytest ==="
+                    echo "[DEBUG] Команда запуска: python -m pytest ${pytestArgs}"
 
                     try {
                         sh """
@@ -73,11 +79,20 @@ pipeline {
                                 python -m pytest ${pytestArgs}
                         """
                     } catch (Exception e) {
-                        echo "Тесты завершились с ошибками: ${e.message}"
+                        echo "❌ Тесты завершились с ошибками: ${e.message}"
                         currentBuild.result = 'FAILURE'
                     } finally {
                         echo "=== Проверка файлов Allure на агенте ==="
-                        sh "ls -lhR ${ALLURE_DIR} || true"
+                        // Сначала смотрим, что лежит в папке результатов
+                        sh "ls -lhR ${ALLURE_DIR} || echo 'Папка пуста или не существует'"
+
+                        // Проверяем, появился ли index.html после генерации (или если её запускали вручную)
+                        def reportDir = "${WORKSPACE}/allure-report"
+                        if (fileExists(reportDir + "/index.html")) {
+                            echo "✅ Отчёт Allure успешно сгенерирован: ${reportDir}/index.html"
+                        } else {
+                            echo "⚠️ index.html пока не найден. Он будет создан на этапе post."
+                        }
                     }
                 }
             }
@@ -87,7 +102,7 @@ pipeline {
     post {
         always {
             script {
-                echo "=== Генерация Allure отчета ==="
+                echo "=== Генерация Allure отчета (post-action) ==="
                 allure([
                     includeProperties: false,
                     jdk: '',
@@ -96,10 +111,21 @@ pipeline {
                     results: [[path: 'allure-results']],
                     commandline: 'Allure 2.29.0'
                 ])
+
+                // Финальная проверка после генерации
+                def reportDir = "${WORKSPACE}/allure-report"
+                if (fileExists(reportDir + "/index.html")) {
+                    echo "🎉 Allure Report готов: откройте ${reportDir}/index.html в браузере или используйте ссылку в интерфейсе Jenkins."
+                } else {
+                    echo "❌ Ошибка: папка allure-report создана, но index.html отсутствует. Проверьте логи Allure CLI."
+                }
             }
         }
         failure {
             echo "Пайплайн упал. Проверьте логи и права на папки."
+        }
+        cleanup {
+            echo "Очистка завершена."
         }
     }
 }
