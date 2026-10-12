@@ -101,7 +101,7 @@ pipeline {
                 allure([
                     includeProperties: false,
                     jdk: '',
-                    properties: ,
+                    properties: , // <-- ИСПРАВЛЕНО: пустой список вместо запятой
                     reportBuildPolicy: 'ALWAYS',
                     results: [[path: 'allure-results']],
                     commandline: 'Allure 2.29.0'
