@@ -1,6 +1,9 @@
 FROM python:3.11-slim-bookworm
 
-# Работаем от root, чтобы ставить пакеты и создавать пользователя
+# Передаём UID и GID из Jenkins (по умолчанию 1000:1000)
+ARG UID=1000
+ARG GID=1000
+
 USER root
 WORKDIR /app
 
@@ -48,16 +51,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ── Копируем весь код проекта ──
 COPY . .
 
-# ── Создаём непривилегированного пользователя и выставляем права ──
-# Сначала создаём пользователя и домашнюю папку
-RUN groupadd -r testuser && useradd -r -g testuser -G audio,video testuser \
-    && mkdir -p /home/testuser/Downloads
+# ── Создаём непривилегированного пользователя с переданным UID/GID ──
+# Важно: сначала создаём группу с нужным GID, потом пользователя с нужным UID
+RUN groupadd -r testuser -g ${GID} && \
+    useradd -r -u ${UID} -g testuser -G audio,video testuser && \
+    mkdir -p /home/testuser/Downloads /app/reports /app/allure-results /app/screenshots
 
-# ВАЖНО: отдаём права на всю рабочую директорию /app (включая все файлы из COPY)
-# Это решает PermissionError при записи Allure-результатов
+# Выставляем права на все директории под этого пользователя
 RUN chown -R testuser:testuser /home/testuser /app
 
 # Переключаемся на непривилегированного пользователя
 USER testuser
 
 CMD ["pytest", "-v"]
+

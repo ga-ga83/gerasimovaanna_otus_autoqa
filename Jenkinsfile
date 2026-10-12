@@ -27,22 +27,24 @@ pipeline {
         stage('Verify & Prepare Workspace') {
             steps {
                 sh 'docker --version'
-                echo "=== Подготовка директорий и выдача прав ==="
-                // Создаем папки заранее на хосте от имени пользователя jenkins
-                // и даем полные права, чтобы root-пользователь внутри Docker мог в них писать
+                echo "=== Подготовка директорий ==="
+                // Создаем папки заранее. Права выставлять не нужно (убираем chmod 777),
+                // так как пользователь внутри контейнера будет иметь те же UID/GID, что и Jenkins.
                 sh '''
                     mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
-                    chmod -R 777 "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
                 '''
             }
         }
 
-        // Если образ уже собран локально и вы просто тестируете пайплайн,
-        // эту стадию можно убрать. Если нужно собирать каждый раз — оставьте.
         stage('Build Docker Image') {
             steps {
-                echo "=== Сборка Docker-образа ==="
-                sh "docker build -t ${params.IMAGE_FULL} ."
+                echo "=== Сборка Docker-образа с передачей UID/GID ==="
+                sh """
+                    docker build \
+                        --build-arg UID=$(id -u) \
+                        --build-arg GID=$(id -g) \
+                        -t ${params.IMAGE_FULL} .
+                """
             }
         }
 
@@ -80,10 +82,8 @@ pipeline {
                         // Используем || true, чтобы пайплайн не падал, даже если папка пустая
                         sh "ls -lhR ${ALLURE_DIR} || true"
 
-                        echo "=== Возврат прав пользователю Jenkins ==="
-                        // Если файлы внутри контейнера создались от root, возвращаем права текущему UID/GID,
-                        // чтобы плагин Allure в Jenkins смог их прочитать и очистить рабочую область позже
-                        sh "docker run --rm -v ${WORKSPACE}:/workspace alpine chown -R \$(id -u):\$(id -g) /workspace || true"
+                        // Блок восстановления прав удалён, так как теперь файлы создаются
+                        // от имени пользователя с тем же UID, что и у Jenkins.
                     }
                 }
             }
