@@ -28,8 +28,6 @@ pipeline {
             steps {
                 sh 'docker --version'
                 echo "=== Подготовка директорий ==="
-                // Создаем папки заранее. Права выставлять не нужно (убираем chmod 777),
-                // так как пользователь внутри контейнера будет иметь те же UID/GID, что и Jenkins.
                 sh '''
                     mkdir -p "${REPORTS_DIR}" "${ALLURE_DIR}" "${SCREENSHOTS_DIR}"
                 '''
@@ -41,8 +39,8 @@ pipeline {
                 echo "=== Сборка Docker-образа с передачей UID/GID ==="
                 sh """
                     docker build \
-                        --build-arg UID=$(id -u) \
-                        --build-arg GID=$(id -g) \
+                        --build-arg UID=\$(id -u) \
+                        --build-arg GID=\$(id -g) \
                         -t ${params.IMAGE_FULL} .
                 """
             }
@@ -79,11 +77,7 @@ pipeline {
                         currentBuild.result = 'FAILURE'
                     } finally {
                         echo "=== Проверка файлов Allure на агенте ==="
-                        // Используем || true, чтобы пайплайн не падал, даже если папка пустая
                         sh "ls -lhR ${ALLURE_DIR} || true"
-
-                        // Блок восстановления прав удалён, так как теперь файлы создаются
-                        // от имени пользователя с тем же UID, что и у Jenkins.
                     }
                 }
             }
