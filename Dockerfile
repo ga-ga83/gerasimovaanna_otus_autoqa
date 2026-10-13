@@ -64,4 +64,3 @@ RUN chown -R testuser:testuser /home/testuser /app
 USER testuser
 
 CMD ["pytest", "-v"]
-
